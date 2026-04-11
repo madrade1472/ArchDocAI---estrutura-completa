@@ -12,6 +12,7 @@
       --blue: #1d3557;
       --accent: #4578a0;
       --green: #2d6a4f;
+      --red: #b5451b;
       --text: #e6edf3;
       --muted: #8b949e;
     }
@@ -21,9 +22,6 @@
     header {
       background: var(--blue);
       padding: 1.5rem 2rem;
-      display: flex;
-      align-items: center;
-      gap: 1rem;
     }
     header h1 { font-size: 1.6rem; font-weight: 700; }
     header p { color: #aac4e0; font-size: 0.9rem; margin-top: 0.25rem; }
@@ -37,9 +35,9 @@
       padding: 1.5rem;
       margin-bottom: 1.5rem;
     }
-    .card h2 { font-size: 1.1rem; margin-bottom: 1rem; color: var(--accent); }
+    .card h2 { font-size: 1.05rem; margin-bottom: 1rem; color: var(--accent); border-bottom: 1px solid var(--border); padding-bottom: 0.5rem; }
 
-    label { display: block; margin-bottom: 0.35rem; font-size: 0.85rem; color: var(--muted); }
+    label { display: block; margin-bottom: 0.35rem; font-size: 0.82rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
     input, select {
       width: 100%;
       background: var(--dark);
@@ -49,22 +47,34 @@
       padding: 0.6rem 0.8rem;
       font-size: 0.95rem;
       margin-bottom: 1rem;
+      transition: border-color 0.15s;
     }
-    input:focus, select:focus { outline: 2px solid var(--accent); }
+    input:focus, select:focus { outline: none; border-color: var(--accent); }
 
     .row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
 
-    .upload-area {
-      border: 2px dashed var(--border);
-      border-radius: 8px;
-      padding: 2rem;
-      text-align: center;
-      cursor: pointer;
-      transition: border-color 0.2s;
+    .git-input-group {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--dark);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 0 0.8rem;
+      margin-bottom: 1rem;
     }
-    .upload-area:hover { border-color: var(--accent); }
-    .upload-area input { display: none; }
-    .upload-area p { color: var(--muted); margin-top: 0.5rem; font-size: 0.85rem; }
+    .git-input-group svg { flex-shrink: 0; opacity: 0.5; }
+    .git-input-group input {
+      border: none;
+      background: transparent;
+      padding: 0.6rem 0;
+      margin: 0;
+      flex: 1;
+    }
+    .git-input-group:focus-within { border-color: var(--accent); }
+    .git-input-group input:focus { outline: none; }
+
+    .hint { font-size: 0.78rem; color: var(--muted); margin-top: -0.75rem; margin-bottom: 1rem; }
 
     button[type="submit"] {
       width: 100%;
@@ -72,69 +82,108 @@
       color: white;
       border: none;
       border-radius: 8px;
-      padding: 0.85rem;
+      padding: 0.9rem;
       font-size: 1rem;
-      font-weight: 600;
+      font-weight: 700;
       cursor: pointer;
       transition: opacity 0.2s;
+      letter-spacing: 0.03em;
     }
     button[type="submit"]:hover { opacity: 0.85; }
-    button[type="submit"]:disabled { opacity: 0.5; cursor: not-allowed; }
+    button[type="submit"]:disabled { opacity: 0.45; cursor: not-allowed; }
 
-    #status { text-align: center; color: var(--accent); margin: 1rem 0; min-height: 1.5rem; }
+    #status-box {
+      display: none;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .spinner {
+      display: inline-block;
+      width: 32px; height: 32px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin-bottom: 0.75rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #status-text { color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem; }
+
+    .error-box {
+      background: #2a1010;
+      border: 1px solid #6b2020;
+      border-radius: 8px;
+      padding: 1rem 1.2rem;
+      color: #f08080;
+      font-size: 0.88rem;
+      margin-bottom: 1.5rem;
+      display: none;
+    }
 
     #results { display: none; }
-    #results h2 { font-size: 1.4rem; margin-bottom: 0.5rem; }
-    #results .description { color: var(--muted); margin-bottom: 1.5rem; }
+
+    .result-header { margin-bottom: 0.4rem; }
+    .result-header h2 { font-size: 1.4rem; font-weight: 700; }
+    .result-header .meta { color: var(--muted); font-size: 0.82rem; margin-top: 0.2rem; }
+    .description { color: #c9d3e0; margin: 0.75rem 0 1.25rem; line-height: 1.6; font-size: 0.95rem; }
+
+    .section-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); margin-bottom: 0.6rem; margin-top: 1.25rem; }
+
+    .chips { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-bottom: 1rem; }
+    .chip { background: var(--blue); border-radius: 20px; padding: 0.2rem 0.7rem; font-size: 0.78rem; color: #aac4e0; }
 
     .layer-list { list-style: none; }
     .layer-item {
-      background: var(--dark);
-      border-left: 4px solid var(--accent);
-      border-radius: 6px;
-      padding: 0.8rem 1rem;
-      margin-bottom: 0.75rem;
+      background: #0d1117;
+      border-left: 3px solid var(--accent);
+      border-radius: 0 6px 6px 0;
+      padding: 0.75rem 1rem;
+      margin-bottom: 0.6rem;
     }
-    .layer-item strong { display: block; margin-bottom: 0.25rem; }
-    .layer-item small { color: var(--muted); }
+    .layer-item strong { display: block; font-size: 0.95rem; margin-bottom: 0.2rem; }
+    .layer-item .layer-desc { color: var(--muted); font-size: 0.83rem; }
+    .layer-item .layer-comps { color: #555f6e; font-size: 0.76rem; margin-top: 0.3rem; }
 
-    .chips { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0 1rem; }
-    .chip {
-      background: var(--blue);
-      border-radius: 20px;
-      padding: 0.25rem 0.75rem;
-      font-size: 0.8rem;
-    }
+    #diagram-preview { margin: 1rem 0; }
+    #diagram-preview img { max-width: 100%; border-radius: 8px; border: 1px solid var(--border); }
 
-    .download-links { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-top: 0.5rem; }
+    .list-block { background: #0d1117; border-radius: 6px; padding: 0.9rem 1rem; }
+    .list-block .list-title { font-size: 0.76rem; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
+    .list-block ul { list-style: disc; padding-left: 1.2rem; }
+    .list-block li { font-size: 0.85rem; color: var(--muted); margin-bottom: 0.3rem; line-height: 1.5; }
+    .good .list-title { color: #4caf7d; }
+    .improve .list-title { color: #e07050; }
+
+    .download-links { display: flex; gap: 0.75rem; flex-wrap: wrap; margin-top: 1.25rem; }
     .download-links a {
       background: var(--accent);
       color: white;
       text-decoration: none;
-      padding: 0.6rem 1.2rem;
+      padding: 0.55rem 1.1rem;
       border-radius: 6px;
       font-weight: 600;
-      font-size: 0.9rem;
+      font-size: 0.88rem;
+      transition: opacity 0.15s;
     }
-    .download-links a:hover { opacity: 0.85; }
+    .download-links a:hover { opacity: 0.82; }
+    .download-links a.pdf { background: #6a2d7a; }
+    .download-links a.png { background: var(--green); }
 
-    .validation-q { margin-bottom: 1rem; }
-    .validation-q label { color: var(--text); font-size: 0.95rem; margin-bottom: 0.4rem; }
-    .validation-q input { margin-bottom: 0; }
-
-    #diagram-preview img { max-width: 100%; border-radius: 8px; margin-top: 0.5rem; }
-
-    .list-points { list-style: disc; padding-left: 1.5rem; color: var(--muted); }
-    .list-points li { margin-bottom: 0.4rem; font-size: 0.9rem; }
+    @media (max-width: 600px) {
+      .row, .two-col { grid-template-columns: 1fr; }
+    }
   </style>
 </head>
 <body>
 
 <header>
-  <div>
-    <h1>ArchDocAI</h1>
-    <p>Documentação automática de arquitetura com IA — suporta Claude e GPT</p>
-  </div>
+  <h1>ArchDocAI</h1>
+  <p>Conecte seu repositório Git — o AI lê, documenta e gera diagrama da arquitetura automaticamente</p>
 </header>
 
 <main>
@@ -156,7 +205,7 @@
         </div>
       </div>
       <label>API Key</label>
-      <input type="password" name="api_key" placeholder="sk-... ou claude api key" required />
+      <input type="password" name="api_key" placeholder="sk-...  ou  sk-ant-..." required />
 
       <label>Idioma de saída</label>
       <select name="language">
@@ -166,143 +215,182 @@
     </div>
 
     <div class="card">
-      <h2>2. Enviar Projeto</h2>
-      <div class="upload-area" onclick="document.getElementById('zip-input').click()">
-        <input type="file" id="zip-input" name="project_zip" accept=".zip" required />
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#4578a0" stroke-width="2">
-          <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>
+      <h2>2. Repositório Git</h2>
+
+      <label>URL do repositório</label>
+      <div class="git-input-group">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="18" cy="18" r="3"/><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/>
+          <line x1="6" y1="9" x2="6" y2="15"/><line x1="9" y1="18" x2="15" y2="18"/>
+          <line x1="15" y1="9" x2="8.5" y2="15.5"/>
         </svg>
-        <strong id="file-label">Clique para selecionar o .zip do projeto</strong>
-        <p>Compacte a pasta raiz do projeto em .zip e envie aqui</p>
+        <input type="url" name="git_url" placeholder="https://github.com/usuario/repositorio.git" required />
+      </div>
+      <p class="hint">Repositórios públicos não precisam de credenciais. Para privados, use HTTPS com token: https://TOKEN@github.com/...</p>
+
+      <div class="row">
+        <div>
+          <label>Branch (opcional)</label>
+          <input type="text" name="git_branch" placeholder="main, develop, master..." />
+        </div>
+        <div>
+          <label>Nome do projeto (opcional)</label>
+          <input type="text" name="project_name" placeholder="Inferido automaticamente do repo" />
+        </div>
       </div>
     </div>
 
     <button type="submit" id="submit-btn">Analisar Arquitetura</button>
   </form>
 
-  <div id="status"></div>
+  <div id="status-box">
+    <div class="spinner"></div>
+    <div style="font-weight:600;font-size:1rem">Analisando repositório...</div>
+    <div id="status-text">Clonando repositório e escaneando arquivos</div>
+  </div>
+
+  <div class="error-box" id="error-box"></div>
 
   <div id="results" class="card">
-    <h2 id="proj-name"></h2>
+    <div class="result-header">
+      <h2 id="proj-name"></h2>
+      <div class="meta" id="proj-meta"></div>
+    </div>
     <p class="description" id="proj-desc"></p>
 
-    <div style="margin-bottom:1rem">
-      <strong style="color:var(--accent)">Stack Tecnológico</strong>
-      <div class="chips" id="tech-chips"></div>
-    </div>
+    <div class="section-title">Stack Tecnológico</div>
+    <div class="chips" id="tech-chips"></div>
 
-    <strong style="color:var(--accent)">Camadas da Arquitetura</strong>
-    <ul class="layer-list" id="layer-list" style="margin: 0.75rem 0 1.5rem"></ul>
+    <div class="section-title">Camadas da Arquitetura</div>
+    <ul class="layer-list" id="layer-list"></ul>
 
     <div id="diagram-preview">
-      <strong style="color:var(--accent)">Diagrama</strong>
+      <div class="section-title">Diagrama</div>
     </div>
 
-    <div id="validation-section" style="margin-top:1.5rem;display:none">
-      <strong style="color:var(--accent)">Validação — O AI tem dúvidas:</strong>
-      <div id="validation-questions" style="margin-top:0.75rem"></div>
-      <button type="button" id="validate-btn" style="margin-top:0.75rem;background:var(--accent);color:white;border:none;border-radius:6px;padding:0.6rem 1.2rem;cursor:pointer;font-weight:600">
-        Confirmar Correções
-      </button>
+    <div class="two-col">
+      <div class="list-block good">
+        <div class="list-title">Boas Práticas Identificadas</div>
+        <ul id="good-list"></ul>
+      </div>
+      <div class="list-block improve">
+        <div class="list-title">Pontos de Melhoria</div>
+        <ul id="improve-list"></ul>
+      </div>
     </div>
 
-    <div style="margin-top:1.5rem">
-      <strong style="color: #2d6a4f">Boas Práticas Identificadas</strong>
-      <ul class="list-points" id="good-list" style="margin-top:0.5rem"></ul>
-    </div>
-    <div style="margin-top:1rem">
-      <strong style="color: #b5451b">Pontos de Melhoria</strong>
-      <ul class="list-points" id="improve-list" style="margin-top:0.5rem"></ul>
-    </div>
-
-    <div class="download-links" id="download-links" style="margin-top:1.5rem"></div>
+    <div class="download-links" id="download-links"></div>
   </div>
 </main>
 
 <script>
-  const providerEl = document.getElementById('provider');
-  const modelEl = document.getElementById('model');
+  // Provider → default model
   const modelMap = { openai: 'gpt-4o', anthropic: 'claude-sonnet-4-6', custom: '' };
-  providerEl.addEventListener('change', () => { modelEl.value = modelMap[providerEl.value] || ''; });
-
-  document.getElementById('zip-input').addEventListener('change', e => {
-    const f = e.target.files[0];
-    if (f) document.getElementById('file-label').textContent = f.name;
+  document.getElementById('provider').addEventListener('change', e => {
+    document.getElementById('model').value = modelMap[e.target.value] || '';
   });
 
-  const form = document.getElementById('analyze-form');
-  const status = document.getElementById('status');
-  const results = document.getElementById('results');
+  const statusSteps = [
+    "Clonando repositório (shallow clone)...",
+    "Escaneando arquivos do projeto...",
+    "Enviando contexto para o LLM...",
+    "Aguardando análise de arquitetura...",
+    "Gerando diagrama e documentos...",
+  ];
 
-  form.addEventListener('submit', async e => {
+  let stepInterval;
+
+  function startStatusAnimation() {
+    let i = 0;
+    document.getElementById('status-text').textContent = statusSteps[0];
+    stepInterval = setInterval(() => {
+      i = Math.min(i + 1, statusSteps.length - 1);
+      document.getElementById('status-text').textContent = statusSteps[i];
+    }, 8000);
+  }
+
+  function stopStatusAnimation() {
+    clearInterval(stepInterval);
+  }
+
+  document.getElementById('analyze-form').addEventListener('submit', async e => {
     e.preventDefault();
     const btn = document.getElementById('submit-btn');
+    const statusBox = document.getElementById('status-box');
+    const errorBox = document.getElementById('error-box');
+    const results = document.getElementById('results');
+
     btn.disabled = true;
-    status.textContent = 'Analisando... isso pode levar ~30 segundos ⏳';
+    errorBox.style.display = 'none';
     results.style.display = 'none';
+    statusBox.style.display = 'block';
+    startStatusAnimation();
 
     try {
-      const fd = new FormData(form);
+      const fd = new FormData(e.target);
       const res = await fetch('/api/analyze', { method: 'POST', body: fd });
-      if (!res.ok) { const err = await res.json(); throw new Error(err.detail || res.statusText); }
       const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.detail || res.statusText);
+      }
+
       renderResults(data);
-      status.textContent = '';
     } catch (err) {
-      status.textContent = 'Erro: ' + err.message;
+      errorBox.textContent = 'Erro: ' + err.message;
+      errorBox.style.display = 'block';
     } finally {
+      stopStatusAnimation();
+      statusBox.style.display = 'none';
       btn.disabled = false;
     }
   });
 
   function renderResults(data) {
     document.getElementById('proj-name').textContent = data.project_name;
+    document.getElementById('proj-meta').textContent =
+      `${data.files_scanned} arquivos analisados · ${data.layers?.length ?? 0} camadas identificadas`;
     document.getElementById('proj-desc').textContent = data.description;
 
-    const chips = document.getElementById('tech-chips');
-    chips.innerHTML = data.tech_stack.map(t => `<span class="chip">${t}</span>`).join('');
+    // Tech chips
+    document.getElementById('tech-chips').innerHTML =
+      (data.tech_stack || []).map(t => `<span class="chip">${t}</span>`).join('');
 
-    const layerList = document.getElementById('layer-list');
-    layerList.innerHTML = data.layers.map(l => `
+    // Layers
+    document.getElementById('layer-list').innerHTML = (data.layers || []).map(l => `
       <li class="layer-item" style="border-color:${l.color || '#4578a0'}">
         <strong>${l.name}</strong>
-        <small>${l.description}</small>
-        ${l.components?.length ? '<small style="display:block;margin-top:4px;color:#888">' + l.components.map(c => c.name).join(' · ') + '</small>' : ''}
+        <div class="layer-desc">${l.description || ''}</div>
+        ${l.components?.length
+          ? `<div class="layer-comps">${l.components.map(c => c.name).join(' · ')}</div>`
+          : ''}
       </li>
     `).join('');
 
     // Diagram
     const diagDiv = document.getElementById('diagram-preview');
     if (data.files?.diagram) {
-      diagDiv.innerHTML = `<strong style="color:var(--accent)">Diagrama</strong><br><img src="${data.files.diagram}" alt="Architecture Diagram" />`;
+      diagDiv.innerHTML = `
+        <div class="section-title">Diagrama</div>
+        <img src="${data.files.diagram}?t=${Date.now()}" alt="Architecture Diagram" />
+      `;
     }
 
-    // Validation questions
-    if (data.validation_questions?.length) {
-      const vSection = document.getElementById('validation-section');
-      vSection.style.display = 'block';
-      const vQ = document.getElementById('validation-questions');
-      vQ.innerHTML = data.validation_questions.map((q, i) => `
-        <div class="validation-q">
-          <label>${i + 1}. ${q}</label>
-          <input type="text" placeholder="Sua resposta (opcional)" data-question="${encodeURIComponent(q)}" />
-        </div>
-      `).join('');
-    }
-
-    // Good practices & improvements
-    document.getElementById('good-list').innerHTML = data.good_practices.map(g => `<li>${g}</li>`).join('');
-    document.getElementById('improve-list').innerHTML = data.improvement_points.map(g => `<li>${g}</li>`).join('');
+    // Lists
+    document.getElementById('good-list').innerHTML =
+      (data.good_practices || []).map(g => `<li>${g}</li>`).join('');
+    document.getElementById('improve-list').innerHTML =
+      (data.improvement_points || []).map(g => `<li>${g}</li>`).join('');
 
     // Downloads
     const dl = document.getElementById('download-links');
     dl.innerHTML = '';
     if (data.files?.docx) dl.innerHTML += `<a href="${data.files.docx}" download>⬇ Baixar .docx</a>`;
-    if (data.files?.pdf) dl.innerHTML += `<a href="${data.files.pdf}" download>⬇ Baixar PDF</a>`;
-    if (data.files?.diagram) dl.innerHTML += `<a href="${data.files.diagram}" download>⬇ Baixar Diagrama PNG</a>`;
+    if (data.files?.pdf)  dl.innerHTML += `<a href="${data.files.pdf}" download class="pdf">⬇ Baixar PDF</a>`;
+    if (data.files?.diagram) dl.innerHTML += `<a href="${data.files.diagram}" download class="png">⬇ Diagrama PNG</a>`;
 
-    results.style.display = 'block';
-    results.scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('results').style.display = 'block';
+    document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
   }
 </script>
 </body>

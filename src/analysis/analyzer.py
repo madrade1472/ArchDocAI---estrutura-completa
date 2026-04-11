@@ -116,16 +116,86 @@ class ArchitectureAnalyzer:
         return updated
 
     def _parse_json(self, response: str) -> dict:
-        # Strip markdown code fences if present
         text = response.strip()
+
+        # Strip markdown code fences if present
         if text.startswith("```"):
             lines = text.split("\n")
-            text = "\n".join(lines[1:-1]) if lines[-1] == "```" else "\n".join(lines[1:])
+            # Remove first line (```json or ```) and last line (```)
+            inner = lines[1:]
+            if inner and inner[-1].strip() == "```":
+                inner = inner[:-1]
+            text = "\n".join(inner).strip()
 
+        # Try direct parse first
         try:
             return json.loads(text)
-        except json.JSONDecodeError as e:
-            raise ValueError(f"LLM did not return valid JSON: {e}\n\nResponse:\n{text[:500]}")
+        except json.JSONDecodeError:
+            pass
+
+        # Extract outermost {...} block in case the LLM added prose before/after
+        start = text.find("{")
+        end = text.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            candidate = text[start:end + 1]
+            try:
+                return json.loads(candidate)
+            except json.JSONDecodeError:
+                pass
+
+        # Last resort: try to repair truncated JSON by closing open structures
+        try:
+            return self._repair_json(text)
+        except Exception:
+            pass
+
+        raise ValueError(
+            f"LLM did not return valid JSON.\n\nFirst 800 chars of response:\n{text[:800]}"
+        )
+
+    def _repair_json(self, text: str) -> dict:
+        """Best-effort repair of truncated JSON by balancing brackets."""
+        start = text.find("{")
+        if start == -1:
+            raise ValueError("No JSON object found")
+
+        chunk = text[start:]
+        depth_brace = 0
+        depth_bracket = 0
+        in_string = False
+        escape = False
+
+        for i, ch in enumerate(chunk):
+            if escape:
+                escape = False
+                continue
+            if ch == "\\" and in_string:
+                escape = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == "{":
+                depth_brace += 1
+            elif ch == "}":
+                depth_brace -= 1
+                if depth_brace == 0:
+                    # Found complete object
+                    return json.loads(chunk[: i + 1])
+            elif ch == "[":
+                depth_bracket += 1
+            elif ch == "]":
+                depth_bracket -= 1
+
+        # Truncated — close open structures
+        suffix = ""
+        if in_string:
+            suffix += '"'
+        suffix += "]" * max(depth_bracket, 0)
+        suffix += "}" * max(depth_brace, 0)
+        return json.loads(chunk + suffix)
 
     def _build_result(self, data: dict) -> AnalysisResult:
         return AnalysisResult(
