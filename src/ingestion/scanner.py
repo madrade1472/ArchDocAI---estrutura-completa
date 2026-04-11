@@ -13,6 +13,9 @@ import os
 import fnmatch
 from pathlib import Path
 from dataclasses import dataclass
+from src.logger import get_logger
+
+log = get_logger(__name__)
 
 SUPPORTED_EXTENSIONS = {
     ".py": "Python",
@@ -154,7 +157,9 @@ class ProjectScanner:
 
         # Sort by score ascending (best first), then slice
         candidates.sort(key=lambda x: x[0])
-        return [sf for _, sf in candidates[: self.max_files]]
+        result = [sf for _, sf in candidates[: self.max_files]]
+        log.info("Scan complete: %d files selected (out of %d candidates)", len(result), len(candidates))
+        return result
 
     def _score(self, filename: str, language: str, depth: int, size: int) -> tuple:
         lang_score = LANGUAGE_PRIORITY.get(language, 15)

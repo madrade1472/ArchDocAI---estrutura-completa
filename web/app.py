@@ -1,12 +1,13 @@
 """
 ArchDocAI Web Interface - FastAPI backend + simple HTML frontend.
-Analyzes projects directly from a Git URL (shallow clone, no zip needed).
+Analyzes projects directly from a Git URL (shallow clone).
 
-Fixes applied:
-- API key never written to os.environ (thread-safe per-request config)
-- Analysis runs in a background thread (non-blocking)
-- Job store with polling endpoint (/api/status/{job_id})
+Security & reliability:
+- Rate limiting: 10 requests / hour per IP (sliding window)
+- Thread-safe API key handling (never written to os.environ)
+- Background thread per job with real-time status polling
 - Automatic cleanup of output folders older than 24h
+- Structured logging to console and daily JSON log file
 """
 
 import shutil
@@ -17,10 +18,19 @@ import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from fastapi import FastAPI, Form, HTTPException
+from fastapi import FastAPI, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+
+from src.logger import get_logger, setup_logging
+from src.security import RateLimiter
+
+setup_logging(log_dir="./logs")
+log = get_logger(__name__)
+
+# 10 requests per hour per IP - enough for real use, blocks abuse
+_rate_limiter = RateLimiter(max_requests=10, window_seconds=3600)
 
 
 # ---------------------------------------------------------------------------
@@ -59,6 +69,8 @@ class JobStore:
             for jid in stale:
                 del self._jobs[jid]
                 removed += 1
+        if removed:
+            log.info("Purged %d stale jobs", removed)
         return removed
 
 
@@ -71,6 +83,7 @@ _jobs = JobStore()
 
 def cleanup_old_output(output_root: Path, max_age_hours: int = 24) -> None:
     cutoff = datetime.utcnow() - timedelta(hours=max_age_hours)
+    removed = 0
     for folder in output_root.iterdir():
         if not folder.is_dir():
             continue
@@ -78,8 +91,11 @@ def cleanup_old_output(output_root: Path, max_age_hours: int = 24) -> None:
             mtime = datetime.utcfromtimestamp(folder.stat().st_mtime)
             if mtime < cutoff:
                 shutil.rmtree(folder, ignore_errors=True)
+                removed += 1
         except OSError:
             continue
+    if removed:
+        log.info("Cleaned %d old output folders", removed)
 
 
 # ---------------------------------------------------------------------------
@@ -97,20 +113,24 @@ def _run_analysis(
     project_name: str,
     output_root: Path,
 ) -> None:
+    extra = {"job_id": job_id}
     tmp_dir = tempfile.mkdtemp(prefix="archdoc_")
+
     try:
+        log.info("Job started - cloning %s", git_url, extra=extra)
         _jobs.update(job_id, status="running", step="Clonando repositorio...")
 
-        clone_dir = Path(tmp_dir) / "repo"
         cmd = ["git", "clone", "--depth=1", "--single-branch"]
         if git_branch.strip():
             cmd += ["--branch", git_branch.strip()]
+        clone_dir = Path(tmp_dir) / "repo"
         cmd += [git_url.strip(), str(clone_dir)]
 
         result_clone = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
         if result_clone.returncode != 0:
             raise RuntimeError(f"Git clone falhou: {result_clone.stderr.strip()}")
 
+        log.info("Clone complete", extra=extra)
         _jobs.update(job_id, step="Escaneando arquivos do projeto...")
 
         project_root = clone_dir
@@ -126,24 +146,27 @@ def _run_analysis(
         output_dir_run = output_root / job_id
         output_dir_run.mkdir(parents=True, exist_ok=True)
 
-        # Thread-safe: LLMConfig built locally, never touches os.environ
         from src.ingestion import ProjectContext
         from src.analysis import LLMClient, ArchitectureAnalyzer, DiagramGenerator
         from src.analysis.llm_client import LLMConfig
         from src.output import DocxGenerator, PdfGenerator
 
+        # Thread-safe: LLMConfig built locally, never touches os.environ
         config = LLMConfig(provider=provider, api_key=api_key, model=model)  # type: ignore
         client = LLMClient(config=config)
 
         ctx = ProjectContext.from_path(str(project_root), project_name=inferred_name)
         summary = ctx.summary()
+        log.info("Scanned %d files (%s KB)", summary["total_files"], summary["total_size_kb"], extra=extra)
 
         _jobs.update(job_id, step=f"Analisando {summary['total_files']} arquivos com LLM...")
 
         analyzer = ArchitectureAnalyzer(client=client, language=language)
         analysis = analyzer.analyze(ctx)
 
+        log.info("LLM analysis complete: %d layers", len(analysis.layers), extra=extra)
         _jobs.update(job_id, step="Gerando diagrama...")
+
         diagram_gen = DiagramGenerator(output_dir=str(output_dir_run))
         diagram_path = diagram_gen.generate_png(analysis)
         mermaid = diagram_gen.generate_mermaid(analysis)
@@ -159,6 +182,7 @@ def _run_analysis(
         def rel(p: str) -> str:
             return "/" + str(Path(p).relative_to("."))
 
+        log.info("Job complete - outputs: diagram, docx, pdf", extra=extra)
         _jobs.update(
             job_id,
             status="done",
@@ -182,6 +206,7 @@ def _run_analysis(
         )
 
     except Exception as exc:
+        log.error("Job failed: %s", exc, exc_info=True, extra=extra)
         _jobs.update(job_id, status="error", step="Erro.", error=str(exc))
 
     finally:
@@ -193,7 +218,7 @@ def _run_analysis(
 # ---------------------------------------------------------------------------
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="ArchDocAI", version="1.2.0")
+    app = FastAPI(title="ArchDocAI", version="1.3.0")
 
     app.add_middleware(
         CORSMiddleware,
@@ -208,6 +233,7 @@ def create_app() -> FastAPI:
 
     @app.on_event("startup")
     async def startup():
+        log.info("ArchDocAI starting up (v1.3.0)")
         cleanup_old_output(output_root)
 
     @app.get("/", response_class=HTMLResponse)
@@ -217,6 +243,7 @@ def create_app() -> FastAPI:
 
     @app.post("/api/analyze")
     async def analyze(
+        request: Request,
         provider: str = Form(...),
         api_key: str = Form(...),
         model: str = Form(...),
@@ -225,12 +252,26 @@ def create_app() -> FastAPI:
         git_branch: str = Form(""),
         project_name: str = Form(""),
     ):
+        # Rate limiting by IP
+        client_ip = request.client.host if request.client else "unknown"
+        allowed, retry_after = _rate_limiter.check(client_ip)
+
+        if not allowed:
+            log.warning("Rate limit exceeded for IP %s", client_ip)
+            raise HTTPException(
+                status_code=429,
+                detail=f"Limite de requisicoes atingido. Tente novamente em {retry_after} segundos.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
         if provider not in ("openai", "anthropic", "custom"):
             raise HTTPException(400, "provider deve ser openai, anthropic ou custom")
         if not git_url.strip():
             raise HTTPException(400, "git_url e obrigatorio")
 
-        # Cleanup old jobs/output on each new request (cheap O(n) scan)
+        remaining = _rate_limiter.remaining(client_ip)
+        log.info("New job request from %s - %s (remaining quota: %d)", client_ip, git_url, remaining)
+
         _jobs.purge_old()
         cleanup_old_output(output_root)
 
@@ -244,16 +285,24 @@ def create_app() -> FastAPI:
         )
         thread.start()
 
-        return JSONResponse({"job_id": job_id, "status": "queued"}, status_code=202)
+        return JSONResponse(
+            {"job_id": job_id, "status": "queued", "remaining_quota": remaining},
+            status_code=202,
+        )
 
     @app.get("/api/status/{job_id}")
     async def status(job_id: str):
         job = _jobs.get(job_id)
         if job is None:
             raise HTTPException(404, "job nao encontrado")
-
-        # Remove non-serializable fields
         job.pop("created_at", None)
         return JSONResponse(job)
+
+    @app.get("/api/quota")
+    async def quota(request: Request):
+        """Return how many requests the caller still has in the current window."""
+        client_ip = request.client.host if request.client else "unknown"
+        remaining = _rate_limiter.remaining(client_ip)
+        return JSONResponse({"remaining": remaining, "limit": _rate_limiter.max_requests, "window_seconds": _rate_limiter.window_seconds})
 
     return app

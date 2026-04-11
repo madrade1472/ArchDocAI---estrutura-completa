@@ -243,6 +243,8 @@
     <button type="submit" id="submit-btn">Analisar Arquitetura</button>
   </form>
 
+  <div id="quota-info" style="text-align:right;font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;"></div>
+
   <div id="status-box">
     <div class="spinner"></div>
     <div style="font-weight:600;font-size:1rem">Analisando repositório...</div>
@@ -346,7 +348,14 @@
       const res = await fetch('/api/analyze', { method: 'POST', body: fd });
       const data = await res.json();
 
+      if (res.status === 429) throw new Error(data.detail);
       if (!res.ok) throw new Error(data.detail || res.statusText);
+
+      // Show remaining quota to the user
+      if (data.remaining_quota !== undefined) {
+        document.getElementById('quota-info').textContent =
+          `Requisicoes restantes nesta hora: ${data.remaining_quota}`;
+      }
 
       // Start polling every 3 seconds for real progress from server
       pollTimer = setInterval(() => pollStatus(data.job_id), 3000);

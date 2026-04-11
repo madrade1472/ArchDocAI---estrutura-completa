@@ -7,6 +7,9 @@ import json
 from dataclasses import dataclass, field
 from .llm_client import LLMClient
 from ..ingestion.context import ProjectContext
+from src.logger import get_logger
+
+log = get_logger(__name__)
 
 SYSTEM_PROMPT_PT = """Você é um arquiteto de dados e software sênior especialista em documentação técnica.
 Sua função é analisar projetos de engenharia e produzir:
@@ -86,9 +89,13 @@ class ArchitectureAnalyzer:
             f"{ANALYSIS_SCHEMA}"
         )
 
+        log.info("Sending project context to LLM (provider=%s, model=%s)", self.client.config.provider, self.client.config.model)
         raw_response = self.client.chat(system=system, user=user_prompt)
+        log.info("LLM response received (%d chars)", len(raw_response))
         data = self._parse_json(raw_response)
-        return self._build_result(data)
+        result = self._build_result(data)
+        log.info("Analysis complete: %d layers, %d components total", len(result.layers), sum(len(l.get("components", [])) for l in result.layers))
+        return result
 
     def validate_with_user(
         self, result: AnalysisResult, user_answers: dict[str, str]
@@ -145,7 +152,9 @@ class ArchitectureAnalyzer:
 
         # Last resort: try to repair truncated JSON by closing open structures
         try:
-            return self._repair_json(text)
+            result = self._repair_json(text)
+            log.warning("JSON was truncated and repaired - some fields may be incomplete")
+            return result
         except Exception:
             pass
 
