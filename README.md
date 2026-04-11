@@ -1,5 +1,7 @@
 # ArchDocAI
 
+**Autor:** Marcus Andrade &nbsp;|&nbsp; [LinkedIn](https://www.linkedin.com/in/madrade) &nbsp;|&nbsp; [GitHub](https://github.com/madrade1472)
+
 Documentação automática de arquitetura de software e dados com IA.
 Conecte qualquer repositório Git, escolha seu LLM (Claude ou GPT) e receba um diagrama de arquitetura, um documento `.docx` e um PDF gerados automaticamente.
 
@@ -212,3 +214,16 @@ Todos os arquivos ficam na pasta `output/`:
 | `PROJETO_architecture.docx`    | Documentacao tecnica Word        |
 | `PROJETO_architecture.pdf`     | Documentacao tecnica PDF         |
 | `PROJETO_diagram.mmd`          | Markup Mermaid para edicao       |
+
+---
+
+## Licenca
+
+Copyright (c) 2026 Marcus Andrade. Todos os direitos reservados.
+
+Este projeto e proprietario. Visualizacao permitida para fins de portfolio.
+Uso, copia, modificacao e distribuicao sao proibidos sem autorizacao expressa.
+Veja o arquivo [LICENSE](LICENSE) para os termos completos.
+
+**Autor:** Marcus Andrade
+[linkedin.com/in/madrade](https://www.linkedin.com/in/madrade) | [github.com/madrade1472](https://github.com/madrade1472)
