@@ -1,5 +1,5 @@
 """
-Layer 2 — Analysis: Use the LLM to analyze the project context and produce
+Layer 2 - Analysis: Use the LLM to analyze the project context and produce
 a structured architecture description + validation Q&A.
 """
 
@@ -189,7 +189,7 @@ class ArchitectureAnalyzer:
             elif ch == "]":
                 depth_bracket -= 1
 
-        # Truncated — close open structures
+        # Truncated - close open structures
         suffix = ""
         if in_string:
             suffix += '"'

@@ -1,5 +1,5 @@
 """
-Layer 2 — Analysis: LLM-agnostic client.
+Layer 2 - Analysis: LLM-agnostic client.
 Supports OpenAI (GPT-4, GPT-3.5) and Anthropic (Claude) via the same interface.
 Custom base_url allows self-hosted / local models (e.g. Ollama).
 """

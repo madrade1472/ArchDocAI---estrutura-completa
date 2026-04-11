@@ -1,5 +1,5 @@
 """
-ArchDocAI Web Interface — FastAPI backend + simple HTML frontend.
+ArchDocAI Web Interface - FastAPI backend + simple HTML frontend.
 Analyzes projects directly from a Git URL (shallow clone, no zip needed).
 """
 

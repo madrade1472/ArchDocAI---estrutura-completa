@@ -1,5 +1,5 @@
 """
-Layer 2 — Analysis: Generate architecture diagrams from AnalysisResult.
+Layer 2 - Analysis: Generate architecture diagrams from AnalysisResult.
 Renders a layered diagram similar to the reference image using matplotlib.
 Also exports Mermaid markup for embedding in docs.
 """
@@ -11,11 +11,11 @@ from .analyzer import AnalysisResult
 
 # Default palette when layers don't specify colors
 DEFAULT_COLORS = [
-    "#2d6a4f",  # dark green  — sources
-    "#1d3557",  # dark blue   — raw layer
-    "#6a0572",  # purple      — transform
-    "#7b2d00",  # dark red    — engine / processing
-    "#b5451b",  # orange-red  — consumption / output
+    "#2d6a4f",  # dark green  - sources
+    "#1d3557",  # dark blue   - raw layer
+    "#6a0572",  # purple      - transform
+    "#7b2d00",  # dark red    - engine / processing
+    "#b5451b",  # orange-red  - consumption / output
 ]
 
 TEXT_COLOR = "#ffffff"

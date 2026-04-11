@@ -1,5 +1,5 @@
 """
-Layer 1 — Ingestion: Build a compact, structured project context
+Layer 1 - Ingestion: Build a compact, structured project context
 to send to the LLM without wasting tokens.
 """
 

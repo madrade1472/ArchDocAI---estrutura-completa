@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ArchDocAI CLI — Automatic Architecture Documentation
+ArchDocAI CLI - Automatic Architecture Documentation
 Usage:  python cli.py analyze ./my-project
 """
 
@@ -15,7 +15,7 @@ from rich.table import Table
 from rich.prompt import Prompt, Confirm
 from dotenv import load_dotenv
 
-app = typer.Typer(name="archdoc", help="ArchDocAI — Automatic Architecture Documentation")
+app = typer.Typer(name="archdoc", help="ArchDocAI - Automatic Architecture Documentation")
 console = Console()
 
 

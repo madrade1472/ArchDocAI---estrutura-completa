@@ -1,5 +1,5 @@
 """
-Layer 1 — Ingestion: Scan a project directory and collect relevant files.
+Layer 1 - Ingestion: Scan a project directory and collect relevant files.
 Supports Python, SQL, YAML, JSON, JS/TS, Go, Java, and more.
 """
 
