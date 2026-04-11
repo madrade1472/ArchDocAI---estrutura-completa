@@ -23,6 +23,7 @@ import subprocess
 import tempfile
 import threading
 import uuid
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -298,7 +299,19 @@ def _run_analysis(
 # ---------------------------------------------------------------------------
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="ArchDocAI", version="1.3.0")
+    output_root = Path("./output")
+    output_root.mkdir(exist_ok=True)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        log.info(
+            "ArchDocAI starting up (v1.4.0) - CORS=%s, MAX_REPO=%sMB, RATE=%s/%ss",
+            _ALLOWED_ORIGINS, _MAX_REPO_SIZE_MB, _RATE_MAX, _RATE_WINDOW,
+        )
+        cleanup_old_output(output_root)
+        yield
+
+    app = FastAPI(title="ArchDocAI", version="1.4.0", lifespan=lifespan)
 
     app.add_middleware(
         CORSMiddleware,
@@ -307,17 +320,7 @@ def create_app() -> FastAPI:
         allow_headers=["Content-Type"],
     )
 
-    output_root = Path("./output")
-    output_root.mkdir(exist_ok=True)
     app.mount("/output", StaticFiles(directory=str(output_root)), name="output")
-
-    @app.on_event("startup")
-    async def startup():
-        log.info(
-            "ArchDocAI starting up (v1.4.0) - CORS=%s, MAX_REPO=%sMB, RATE=%s/%ss",
-            _ALLOWED_ORIGINS, _MAX_REPO_SIZE_MB, _RATE_MAX, _RATE_WINDOW,
-        )
-        cleanup_old_output(output_root)
 
     @app.get("/health")
     async def health():
