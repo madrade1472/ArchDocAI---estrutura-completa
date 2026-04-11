@@ -303,7 +303,19 @@
   let pollTimer = null;
 
   function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
+    _pollDelay = _POLL_MIN;
+  }
+
+  // Polling with exponential backoff: starts at 2s, doubles each poll, caps at 15s.
+  // Reduces server load as long-running jobs progress.
+  let _pollDelay = 2000;
+  const _POLL_MIN = 2000;
+  const _POLL_MAX = 15000;
+
+  function _scheduleNextPoll(jobId) {
+    pollTimer = setTimeout(() => pollStatus(jobId), _pollDelay);
+    _pollDelay = Math.min(_pollDelay * 1.5, _POLL_MAX);
   }
 
   async function pollStatus(jobId) {
@@ -327,6 +339,8 @@
         const errorBox = document.getElementById('error-box');
         errorBox.textContent = 'Erro: ' + (job.error || 'Erro desconhecido');
         errorBox.style.display = 'block';
+      } else {
+        _scheduleNextPoll(jobId);
       }
     } catch (err) {
       stopPolling();
@@ -365,9 +379,9 @@
           `Requisicoes restantes nesta hora: ${data.remaining_quota}`;
       }
 
-      // Start polling every 3 seconds for real progress from server
-      pollTimer = setInterval(() => pollStatus(data.job_id), 3000);
-      pollStatus(data.job_id); // immediate first check
+      // Immediate first check, then exponential backoff (2s -> 3s -> 4.5s -> ... -> 15s cap)
+      _pollDelay = _POLL_MIN;
+      pollStatus(data.job_id);
 
     } catch (err) {
       statusBox.style.display = 'none';

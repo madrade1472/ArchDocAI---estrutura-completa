@@ -53,12 +53,21 @@ _RATE_MAX = int(os.getenv("RATE_LIMIT_MAX_REQUESTS", "10"))
 _RATE_WINDOW = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "3600"))
 _API_KEY = os.getenv("ARCHDOC_API_KEY", "")  # empty = auth disabled
 _MAX_CONCURRENT_JOBS = int(os.getenv("MAX_CONCURRENT_JOBS", "5"))
+_JOB_TIMEOUT_SECONDS = int(os.getenv("JOB_TIMEOUT_SECONDS", "900"))  # 15 min default
 
 _rate_limiter = RateLimiter(max_requests=_RATE_MAX, window_seconds=_RATE_WINDOW)
 _job_semaphore = threading.Semaphore(_MAX_CONCURRENT_JOBS)
 
 # Only allow https:// and git@ (SSH) URLs -- blocks file://, git://, etc.
 _GIT_URL_RE = re.compile(r"^(https?://|git@)\S+$")
+
+# Matches embedded credentials in https URLs: https://token:x@github.com/...
+_CREDENTIAL_RE = re.compile(r"(https?://)([^@/]+@)")
+
+
+def _sanitize_url(url: str) -> str:
+    """Remove embedded credentials from a git URL before logging."""
+    return _CREDENTIAL_RE.sub(r"\1***@", url)
 
 
 # ---------------------------------------------------------------------------
@@ -133,6 +142,11 @@ def _check_repo_size(git_url: str, job_id: str, extra: dict) -> None:
         pass  # size check is best-effort, never block on failure
 
 
+def _sanitize_for_error(text: str) -> str:
+    """Remove embedded credentials from error messages (e.g. git clone stderr)."""
+    return _CREDENTIAL_RE.sub(r"\1***@", text)
+
+
 # ---------------------------------------------------------------------------
 # Output folder cleanup
 # ---------------------------------------------------------------------------
@@ -183,8 +197,26 @@ def _run_analysis(
         )
         return
 
+    # Watchdog: marks the job as timed-out if still running after _JOB_TIMEOUT_SECONDS
+    def _on_timeout():
+        job = _jobs.get(job_id)
+        if job and job.get("status") == "running":
+            log.error("Job timed out after %ds", _JOB_TIMEOUT_SECONDS, extra=extra)
+            _jobs.update(
+                job_id,
+                status="error",
+                step="Erro.",
+                error=f"Timeout: analise excedeu o limite de {_JOB_TIMEOUT_SECONDS}s. Tente um repositorio menor ou aumente JOB_TIMEOUT_SECONDS.",
+            )
+
+    _watchdog = threading.Timer(_JOB_TIMEOUT_SECONDS, _on_timeout)
+    _watchdog.daemon = True
+    _watchdog.start()
+
+    safe_url = _sanitize_url(git_url)
+
     try:
-        log.info("Job started - cloning %s", git_url, extra=extra)
+        log.info("Job started - cloning %s", safe_url, extra=extra)
         _jobs.update(job_id, status="running", step="Verificando repositorio...")
 
         # Check approximate repo size via git ls-remote before full clone
@@ -199,7 +231,7 @@ def _run_analysis(
 
         result_clone = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
         if result_clone.returncode != 0:
-            raise RuntimeError(f"Git clone falhou: {result_clone.stderr.strip()}")
+            raise RuntimeError(f"Git clone falhou: {_sanitize_for_error(result_clone.stderr.strip())}")
 
         # Verify cloned size on disk
         clone_size_mb = _dir_size_mb(clone_dir)
@@ -290,6 +322,7 @@ def _run_analysis(
         _jobs.update(job_id, status="error", step="Erro.", error=str(exc))
 
     finally:
+        _watchdog.cancel()
         _job_semaphore.release()
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
