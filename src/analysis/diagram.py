@@ -121,6 +121,30 @@ _MAX_CARDS = 8      # truncate columns with more components than this
 # Icon drawing helpers
 # ---------------------------------------------------------------------------
 
+def _split_name(name: str) -> tuple[str, str]:
+    """Split 'Short — Long description' into (short, long).
+    Handles em-dash (—), en-dash (–) and plain hyphen ( - ).
+    Returns (full_name, '') when no separator found.
+    """
+    for sep in (" — ", " – ", " - "):
+        if sep in name:
+            head, tail = name.split(sep, 1)
+            return head.strip(), tail.strip()
+    return name.strip(), ""
+
+
+def _dedup_components(components: list[dict]) -> list[dict]:
+    """Remove duplicate components by normalised name (case-insensitive, strip)."""
+    seen: set[str] = set()
+    result: list[dict] = []
+    for comp in components:
+        key = comp.get("name", "").lower().strip()
+        if key and key not in seen:
+            seen.add(key)
+            result.append(comp)
+    return result
+
+
 def _resolve_icon_type(comp: dict) -> str:
     haystack = (comp.get("tech", "") + " " + comp.get("name", "")).lower()
     best_key = ""
@@ -312,8 +336,8 @@ class DiagramGenerator:
         # Column geometry
         col_w = (_FIG_W - 2 * _MH - (n - 1) * _COL_GAP) / n
 
-        # Adaptive card height based on the busiest column
-        max_comps = max((len(lyr.get("components", [])) for lyr in layers), default=1)
+        # Adaptive card height based on the busiest column (after dedup)
+        max_comps = max((len(_dedup_components(lyr.get("components", []))) for lyr in layers), default=1)
         max_visible = min(max_comps, _MAX_CARDS)
         col_content_h = _FIG_H - 2 * _MV - _TITLE_H - _HDR_H - 2 * _CARD_PAD_V
         card_h = min(_MAX_CARD_H,
@@ -385,8 +409,9 @@ class DiagramGenerator:
                             zorder=5)
 
             # ── Component cards ───────────────────────────────────────
-            visible = components[:_MAX_CARDS]
-            hidden = len(components) - len(visible)
+            deduped = _dedup_components(components)
+            visible = deduped[:_MAX_CARDS]
+            hidden = len(deduped) - len(visible)
 
             card_w = col_w - 2 * _CARD_PAD_H
             card_x = x0 + _CARD_PAD_H
@@ -412,23 +437,39 @@ class DiagramGenerator:
                 _draw_icon(ax, icon_cx, icon_cy,
                            _resolve_icon_type(comp), accent, r=icon_r)
 
-                # Component name (below icon)
-                name_text = comp.get("name", "")
-                nwrap = max(8, int(card_w * 7))
-                name_lines_comp = textwrap.wrap(name_text, width=nwrap)[:2]
-                ax.text(card_x + card_w / 2,
-                        cy_top - icon_area_h - 0.03,
+                # Component name (below icon) — split on dash separators
+                raw_name = comp.get("name", "")
+                short_name, subtitle = _split_name(raw_name)
+
+                name_fs = min(7.8, 5.8 + col_w * 0.45)
+                sub_fs = max(5.5, name_fs - 1.5)
+                nwrap = max(8, int(card_w * 7.5))
+                name_lines_comp = textwrap.wrap(short_name, width=nwrap)[:2]
+
+                name_y = cy_top - icon_area_h - 0.02
+                ax.text(card_x + card_w / 2, name_y,
                         "\n".join(name_lines_comp),
                         ha="center", va="top",
-                        fontsize=min(7.8, 5.8 + col_w * 0.45),
-                        fontweight="bold", color="#1e293b",
-                        linespacing=1.2, zorder=4)
+                        fontsize=name_fs, fontweight="bold",
+                        color="#1e293b", linespacing=1.2, zorder=4)
+
+                # Subtitle from dash-split (shown below name, smaller)
+                if subtitle:
+                    sub_lines = textwrap.wrap(subtitle, width=nwrap)[:2]
+                    # estimate how far name text goes
+                    n_name_lines = len(name_lines_comp)
+                    sub_y = name_y - n_name_lines * (name_fs / 72 * 1.35)
+                    ax.text(card_x + card_w / 2, sub_y,
+                            "\n".join(sub_lines),
+                            ha="center", va="top",
+                            fontsize=sub_fs, color="#475569",
+                            linespacing=1.1, zorder=4)
 
                 # Tech label (bottom of card)
                 tech = comp.get("tech", "")
                 if tech:
                     ax.text(card_x + card_w / 2, cy_bot + 0.09,
-                            tech[:22],
+                            tech[:24],
                             ha="center", va="bottom",
                             fontsize=min(6.8, 5.2 + col_w * 0.35),
                             color=accent, style="italic", zorder=4)
