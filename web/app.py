@@ -456,3 +456,7 @@ def create_app() -> FastAPI:
         return JSONResponse({"remaining": remaining, "limit": _rate_limiter.max_requests, "window_seconds": _rate_limiter.window_seconds})
 
     return app
+
+
+# Module-level instance so uvicorn can reference web.app:app directly
+app = create_app()
