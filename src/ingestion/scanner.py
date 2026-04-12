@@ -84,9 +84,9 @@ IMPORTANT_NAME_PATTERNS = [
     ("readme", 6), ("requirements", 6),
 ]
 
-MAX_FILE_BYTES = 8_000    # ~2k tokens per file; keeps total prompt manageable
+MAX_FILE_BYTES = 3_000    # ~750 tokens per file
 MIN_FILE_BYTES = 1        # Skip truly empty files only
-MAX_FILES = 50            # Top-50 highest-priority files
+MAX_FILES = 25            # Top-25 highest-priority files
 
 
 @dataclass

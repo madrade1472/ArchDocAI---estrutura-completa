@@ -31,10 +31,10 @@ class ProjectContext:
             files=files,
         )
 
-    # ~7 500 tokens input budget — leaves room for system prompt + JSON output
-    # within the default 10 000 tok/min org rate limit.
-    # Override via subclass or monkey-patch for orgs with higher limits.
-    MAX_PROMPT_CHARS: int = 28_000
+    # Target ~3 500 tokens for context so the full request stays well under
+    # the 10 000 tok/min org rate limit (system prompt + schema add ~300 more).
+    # Override via MAX_PROMPT_CHARS env var for orgs with higher limits.
+    MAX_PROMPT_CHARS: int = int(__import__("os").getenv("MAX_PROMPT_CHARS", "12000"))
 
     def to_llm_prompt(self, language: str = "pt") -> str:
         """Serialize the project context into a single prompt string for the LLM.
@@ -48,10 +48,25 @@ class ProjectContext:
         }
         lang_note = lang_instructions.get(language, lang_instructions["pt"])
 
+        # Cap directory tree so it doesn't eat the whole budget on large repos
+        _MAX_TREE_CHARS = 2_000
+        tree = self.directory_tree
+        if len(tree) > _MAX_TREE_CHARS:
+            lines = tree.splitlines()
+            truncated_lines = []
+            used = 0
+            for line in lines:
+                if used + len(line) + 1 > _MAX_TREE_CHARS:
+                    truncated_lines.append("... (truncated)")
+                    break
+                truncated_lines.append(line)
+                used += len(line) + 1
+            tree = "\n".join(truncated_lines)
+
         header = "\n".join([
             f"# Project: {self.project_name}",
             f"\n{lang_note}",
-            "\n## Directory Structure\n```\n" + self.directory_tree + "\n```",
+            "\n## Directory Structure\n```\n" + tree + "\n```",
             "\n## Source Files\n",
         ])
 
