@@ -154,7 +154,7 @@ class TestDiagramGenerator:
 
         gen = DiagramGenerator()
         mermaid = gen.generate_mermaid(result)
-        assert "flowchart TD" in mermaid
+        assert "flowchart" in mermaid
         assert "Ingestion" in mermaid
 
     def test_raises_with_no_layers(self, mock_client, sample_context):

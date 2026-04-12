@@ -1,9 +1,8 @@
 """
 Layer 2 - Analysis: Generate architecture diagrams from AnalysisResult.
 
-Primary renderer: matplotlib — full layout control, professional horizontal-band design.
-Secondary renderer: diagrams (mingrammer) — opt-in via generate_png(use_diagrams=True).
-
+Landscape A4 format — layers flow left → right as columns.
+Each component card has a drawn icon (database, queue, API, code, container…).
 Also exports Mermaid markup for embedding in docs.
 """
 
@@ -14,7 +13,7 @@ from dataclasses import dataclass
 from .analyzer import AnalysisResult
 
 # ---------------------------------------------------------------------------
-# Color palette – one accent per layer (cycles if more layers than colors)
+# Color palette
 # ---------------------------------------------------------------------------
 DEFAULT_COLORS = [
     "#2563eb",  # blue
@@ -27,7 +26,6 @@ DEFAULT_COLORS = [
     "#475569",  # slate
 ]
 
-# Light pastel fills derived from accent colors (hex 18% opacity approximation)
 _PASTEL = [
     "#dbeafe",  # blue-100
     "#dcfce7",  # green-100
@@ -39,299 +37,427 @@ _PASTEL = [
     "#f1f5f9",  # slate-100
 ]
 
-# Tech badge colors (text on white)
-_TECH_COLORS = [
-    "#1d4ed8", "#15803d", "#7e22ce", "#c2410c",
-    "#b91c1c", "#0e7490", "#92400e", "#334155",
-]
+# ---------------------------------------------------------------------------
+# Icon types
+# ---------------------------------------------------------------------------
+_DB = "db"
+_QUEUE = "queue"
+_API = "api"
+_CODE = "code"
+_CONTAINER = "container"
+_CLOUD = "cloud"
+_WEB = "web"
+_GEAR = "gear"
+_ML = "ml"
+_STORAGE = "storage"
+_MONITOR = "monitor"
 
-# Short tech abbreviations shown as colored badge inside component card
-_TECH_ABBR: dict[str, str] = {
-    "python": "PY", "javascript": "JS", "typescript": "TS",
-    "go": "GO", "java": "JV", "rust": "RS", "c++": "C+",
-    "ruby": "RB", "scala": "SC", "kotlin": "KT", "swift": "SW",
-    "fastapi": "FA", "django": "DJ", "flask": "FL", "spring": "SP",
-    "react": "RE", "vue": "VU", "angular": "NG", "svelte": "SV",
-    "postgresql": "PG", "postgres": "PG", "mysql": "MY", "sqlite": "SQ",
-    "mongodb": "MG", "cassandra": "CA", "redis": "RD", "dynamodb": "DY",
-    "elasticsearch": "ES", "kafka": "KF", "rabbitmq": "MQ", "celery": "CL",
-    "kubernetes": "K8", "k8s": "K8", "docker": "DK", "terraform": "TF",
-    "aws": "AW", "gcp": "GC", "azure": "AZ", "s3": "S3",
-    "lambda": "λ", "airflow": "AF", "spark": "SP", "flink": "FL",
-    "nginx": "NX", "apache": "AP", "graphql": "GQ", "rest": "RS",
-    "grpc": "gR", "protobuf": "PB", "jwt": "JW", "oauth": "OA",
-    "mlflow": "ML", "pytorch": "PT", "tensorflow": "TF", "sklearn": "SK",
-    "pandas": "PD", "numpy": "NP", "dbt": "DB", "bigquery": "BQ",
-    "redshift": "RS", "snowflake": "SF", "databricks": "DB",
+# Tech keyword → icon type  (longest match wins)
+_TECH_ICON: dict[str, str] = {
+    "postgresql": _DB, "postgres": _DB, "mysql": _DB, "sqlite": _DB,
+    "mongodb": _DB, "mongo": _DB, "cassandra": _DB, "dynamodb": _DB,
+    "firestore": _DB, "aurora": _DB, "rds": _DB, "cloud sql": _DB,
+    "redis": _DB, "memcached": _DB, "elasticache": _DB,
+    "elasticsearch": _DB, "elastic": _DB, "opensearch": _DB,
+    "kafka": _QUEUE, "rabbitmq": _QUEUE, "celery": _QUEUE,
+    "activemq": _QUEUE, "sqs": _QUEUE, "pubsub": _QUEUE,
+    "pub/sub": _QUEUE, "kinesis": _QUEUE, "eventbridge": _QUEUE,
+    "service bus": _QUEUE, "event hub": _QUEUE, "nats": _QUEUE,
+    "fastapi": _API, "flask": _API, "django": _API, "express": _API,
+    "nginx": _API, "apache": _API, "spring": _API, "grpc": _API,
+    "graphql": _API, "api gateway": _API, "load balancer": _API,
+    "haproxy": _API, "traefik": _API, "rest": _API,
+    "python": _CODE, "javascript": _CODE, "typescript": _CODE,
+    "go": _CODE, "java": _CODE, "rust": _CODE, "scala": _CODE,
+    "kotlin": _CODE, "ruby": _CODE, "c++": _CODE,
+    "pandas": _CODE, "numpy": _CODE,
+    "docker": _CONTAINER, "kubernetes": _CONTAINER, "k8s": _CONTAINER,
+    "fargate": _CONTAINER, "ecs": _CONTAINER, "eks": _CONTAINER,
+    "gke": _CONTAINER, "aks": _CONTAINER, "podman": _CONTAINER,
+    "aws": _CLOUD, "gcp": _CLOUD, "azure": _CLOUD,
+    "lambda": _CLOUD, "cloud run": _CLOUD, "cloudfront": _CLOUD,
+    "s3": _STORAGE, "gcs": _STORAGE, "blob": _STORAGE,
+    "glacier": _STORAGE, "hdfs": _STORAGE,
+    "react": _WEB, "vue": _WEB, "angular": _WEB, "svelte": _WEB,
+    "next": _WEB, "nuxt": _WEB, "html": _WEB,
+    "grafana": _MONITOR, "prometheus": _MONITOR, "cloudwatch": _MONITOR,
+    "datadog": _MONITOR, "bigquery": _MONITOR, "redshift": _MONITOR,
+    "athena": _MONITOR, "snowflake": _MONITOR, "databricks": _MONITOR,
+    "airflow": _GEAR, "spark": _GEAR, "flink": _GEAR, "dbt": _GEAR,
+    "terraform": _GEAR, "ansible": _GEAR, "jenkins": _GEAR,
+    "gitlab": _GEAR, "github": _GEAR, "prefect": _GEAR,
+    "pytorch": _ML, "tensorflow": _ML, "sklearn": _ML,
+    "sagemaker": _ML, "mlflow": _ML, "hugging": _ML, "xgboost": _ML,
 }
 
-# Layout constants
-_FIG_W = 16.0          # figure width in inches
-_DPI = 180
-_LAYER_ACCENT_W = 0.18  # width of left color accent bar (data units)
-_LAYER_HPAD = 0.35      # horizontal padding inside layer band
-_LAYER_VPAD = 0.22      # vertical padding top/bottom inside layer band
-_TITLE_H = 0.55         # height of layer title row
-_COMP_W = 2.6           # component card width
-_COMP_H = 1.05          # component card height
-_COMP_GAP_X = 0.22      # horizontal gap between cards
-_COMP_GAP_Y = 0.2       # vertical gap between card rows
-_MAX_PER_ROW = 5        # max cards per row
-_LAYER_GAP = 0.32       # gap between consecutive layer bands
-_ARROW_H = _LAYER_GAP   # arrow height fits in the gap
-_MARGIN = 0.5           # top/bottom figure margin
+_TYPE_ICON: dict[str, str] = {
+    "source": _QUEUE, "store": _DB, "process": _GEAR,
+    "api": _API, "ui": _WEB, "infra": _CONTAINER,
+    "ml": _ML, "analytics": _MONITOR,
+}
 
+# ---------------------------------------------------------------------------
+# Layout constants  (landscape A4 proportions)
+# ---------------------------------------------------------------------------
+_FIG_W = 18.0       # figure width in inches
+_FIG_H = 11.0       # figure height in inches
+_DPI = 160
+_BG = "#f8fafc"
+
+_MH = 0.30          # horizontal margin
+_MV = 0.42          # vertical margin
+_TITLE_H = 0.55     # project title area
+_HDR_H = 0.72       # column header height
+_COL_GAP = 0.46     # gap between columns (arrow lives here)
+_CARD_PAD_H = 0.13  # horizontal padding inside column
+_CARD_PAD_V = 0.14  # vertical padding top/bottom inside column
+_CARD_GAP = 0.10    # gap between consecutive cards
+_MAX_CARD_H = 1.22  # tallest a card can be
+_MIN_CARD_H = 0.68  # shortest a card can be
+_MAX_CARDS = 8      # truncate columns with more components than this
+
+
+# ---------------------------------------------------------------------------
+# Icon drawing helpers
+# ---------------------------------------------------------------------------
+
+def _resolve_icon_type(comp: dict) -> str:
+    haystack = (comp.get("tech", "") + " " + comp.get("name", "")).lower()
+    best_key = ""
+    best_val = _GEAR
+    for kw, val in _TECH_ICON.items():
+        if kw in haystack and len(kw) > len(best_key):
+            best_key = kw
+            best_val = val
+    if best_key:
+        return best_val
+    return _TYPE_ICON.get(comp.get("type", "").lower(), _GEAR)
+
+
+def _draw_icon(ax, cx: float, cy: float, icon_type: str, color: str, r: float = 0.18) -> None:
+    """Draw a recognisable tech icon centered at (cx, cy) with bounding radius r."""
+    from matplotlib.patches import Circle, Ellipse, Polygon, FancyBboxPatch
+    import matplotlib.patches as mpatches
+
+    # translucent background disc
+    ax.add_patch(Circle((cx, cy), r * 1.25,
+                        facecolor=color + "1a", edgecolor=color + "55",
+                        linewidth=0.6, zorder=4))
+
+    if icon_type == _DB:
+        # Cylinder: rect body + top ellipse + mid-line ellipse
+        cw, ch = r * 1.12, r * 1.0
+        ax.add_patch(mpatches.Rectangle(
+            (cx - cw / 2, cy - ch / 2), cw, ch,
+            facecolor=color + "30", edgecolor=color, linewidth=1.1, zorder=5))
+        ax.add_patch(Ellipse((cx, cy + ch / 2), cw, ch * 0.40,
+                             facecolor=color + "66", edgecolor=color,
+                             linewidth=1.1, zorder=6))
+        ax.add_patch(Ellipse((cx, cy), cw, ch * 0.35,
+                             facecolor="none", edgecolor=color + "88",
+                             linewidth=0.7, zorder=6))
+
+    elif icon_type == _QUEUE:
+        # Three horizontal bars
+        bw, bh = r * 1.28, r * 0.20
+        for offset in (r * 0.38, 0.0, -r * 0.38):
+            ax.add_patch(FancyBboxPatch(
+                (cx - bw / 2, cy + offset - bh / 2), bw, bh,
+                boxstyle="round,pad=0.01",
+                facecolor=color, edgecolor="none", zorder=5))
+        # Chevron on the right of top bar
+        ax.annotate("",
+                    xy=(cx + bw / 2 + r * 0.22, cy + r * 0.38),
+                    xytext=(cx + bw / 2, cy + r * 0.38),
+                    arrowprops=dict(arrowstyle="->", color=color, lw=1.3),
+                    zorder=6)
+
+    elif icon_type == _API:
+        # Hexagon with "API" label
+        pts = [(cx + r * 0.92 * math.cos(math.radians(i * 60 + 30)),
+                cy + r * 0.92 * math.sin(math.radians(i * 60 + 30)))
+               for i in range(6)]
+        ax.add_patch(Polygon(pts, closed=True,
+                             facecolor=color + "30", edgecolor=color,
+                             linewidth=1.3, zorder=5))
+        ax.text(cx, cy, "API", ha="center", va="center",
+                fontsize=max(4.5, r * 28), fontweight="bold",
+                color=color, zorder=6)
+
+    elif icon_type == _CODE:
+        # </> monospace text
+        ax.text(cx, cy, "</>", ha="center", va="center",
+                fontsize=max(6.0, r * 36), fontweight="bold",
+                color=color, family="monospace", zorder=5)
+
+    elif icon_type == _CONTAINER:
+        # Square box with three horizontal lines inside
+        bs = r * 1.02
+        ax.add_patch(FancyBboxPatch(
+            (cx - bs / 2, cy - bs / 2), bs, bs,
+            boxstyle="square,pad=0.01",
+            facecolor=color + "22", edgecolor=color, linewidth=1.2, zorder=5))
+        for frac in (0.28, -0.05, -0.38):
+            ax.plot([cx - bs * 0.38, cx + bs * 0.38],
+                    [cy + frac * bs, cy + frac * bs],
+                    color=color, linewidth=0.9, zorder=6)
+
+    elif icon_type == _CLOUD:
+        # Three overlapping circles + solid base
+        for ox, oy, rr in ((-r * 0.32, -r * 0.08, r * 0.48),
+                            (r * 0.32, -r * 0.08, r * 0.48),
+                            (0.0, r * 0.16, r * 0.52)):
+            ax.add_patch(Circle((cx + ox, cy + oy), rr,
+                                facecolor=color + "44", edgecolor=color,
+                                linewidth=0.9, zorder=5))
+        ax.add_patch(mpatches.Rectangle(
+            (cx - r * 0.78, cy - r * 0.42), r * 1.56, r * 0.34,
+            facecolor=color + "44", edgecolor="none", zorder=5))
+
+    elif icon_type == _WEB:
+        # Globe: circle + equator ellipse + meridian line
+        ax.add_patch(Circle((cx, cy), r * 0.92,
+                            facecolor=color + "22", edgecolor=color,
+                            linewidth=1.3, zorder=5))
+        ax.add_patch(Ellipse((cx, cy), r * 1.84, r * 0.56,
+                             facecolor="none", edgecolor=color,
+                             linewidth=0.9, zorder=6))
+        ax.plot([cx, cx], [cy - r * 0.92, cy + r * 0.92],
+                color=color, linewidth=0.9, zorder=6)
+
+    elif icon_type == _GEAR:
+        # Star-polygon teeth + inner circle
+        pts = []
+        for i in range(16):
+            a = math.radians(i * 22.5)
+            rr = r * 0.88 if i % 2 == 0 else r * 0.66
+            pts.append((cx + rr * math.cos(a), cy + rr * math.sin(a)))
+        ax.add_patch(Polygon(pts, closed=True,
+                             facecolor=color + "30", edgecolor=color,
+                             linewidth=1.1, zorder=5))
+        ax.add_patch(Circle((cx, cy), r * 0.40,
+                            facecolor=color + "66", edgecolor=color,
+                            linewidth=1.0, zorder=6))
+
+    elif icon_type == _ML:
+        # Mini neural net: 2-3-1 nodes + edges
+        nr = r * 0.17
+        node_layers = [
+            [(cx - r * 0.68, cy + r * 0.32), (cx - r * 0.68, cy - r * 0.32)],
+            [(cx, cy + r * 0.48), (cx, cy), (cx, cy - r * 0.48)],
+            [(cx + r * 0.68, cy)],
+        ]
+        for prev_l, next_l in zip(node_layers, node_layers[1:]):
+            for pn in prev_l:
+                for nn in next_l:
+                    ax.plot([pn[0], nn[0]], [pn[1], nn[1]],
+                            color=color, linewidth=0.5, alpha=0.55, zorder=4)
+        for layer_nodes in node_layers:
+            for nx, ny in layer_nodes:
+                ax.add_patch(Circle((nx, ny), nr,
+                                   facecolor=color, edgecolor="white",
+                                   linewidth=0.6, zorder=6))
+
+    elif icon_type == _STORAGE:
+        # Stack of three ellipses (disk platters)
+        dw, dh = r * 1.30, r * 0.30
+        for offset, alpha in ((r * 0.38, "30"), (r * 0.0, "55"), (-r * 0.38, "77")):
+            ax.add_patch(Ellipse((cx, cy + offset), dw, dh,
+                                 facecolor=color + alpha, edgecolor=color,
+                                 linewidth=0.9, zorder=5))
+
+    elif icon_type == _MONITOR:
+        # Bar chart with three bars
+        bw = r * 0.30
+        gap = r * 0.09
+        bars = [(r * 0.56, "44"), (r * 0.90, "88"), (r * 0.68, "66")]
+        total_w = 3 * bw + 2 * gap
+        x0 = cx - total_w / 2
+        base_y = cy - r * 0.52
+        for i, (h, al) in enumerate(bars):
+            ax.add_patch(mpatches.Rectangle(
+                (x0 + i * (bw + gap), base_y), bw, h,
+                facecolor=color + al, edgecolor=color, linewidth=0.8, zorder=5))
+
+    else:
+        # Generic: filled circle
+        ax.add_patch(Circle((cx, cy), r * 0.78,
+                            facecolor=color + "44", edgecolor=color,
+                            linewidth=1.2, zorder=5))
+
+
+# ---------------------------------------------------------------------------
+# Main generator
+# ---------------------------------------------------------------------------
 
 @dataclass
 class DiagramGenerator:
     output_dir: str = "./output"
 
-    # ------------------------------------------------------------------
-    # Public entry point
-    # ------------------------------------------------------------------
-
     def generate_png(self, result: AnalysisResult, filename: str = "architecture.png") -> str:
-        """Render a professional horizontal-band architecture PNG."""
+        """Render a landscape architecture diagram PNG with drawn icons."""
         if not result.layers:
             raise ValueError("No layers found in analysis result.")
         return self._render(result, filename)
-
-    # ------------------------------------------------------------------
-    # Main renderer
-    # ------------------------------------------------------------------
 
     def _render(self, result: AnalysisResult, filename: str) -> str:
         import matplotlib
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
-        import matplotlib.patches as mpatches
         from matplotlib.patches import FancyBboxPatch
 
         layers = result.layers
-        n_layers = len(layers)
+        n = len(layers)
 
-        # ── compute layer heights ──────────────────────────────────────
-        layer_heights: list[float] = []
-        for layer in layers:
-            n_comps = len(layer.get("components", []))
-            n_rows = max(1, math.ceil(n_comps / _MAX_PER_ROW)) if n_comps > 0 else 0
-            cards_h = n_rows * (_COMP_H + _COMP_GAP_Y) - _COMP_GAP_Y if n_rows > 0 else 0
-            h = _LAYER_VPAD + _TITLE_H + (cards_h + _LAYER_VPAD if cards_h else _LAYER_VPAD)
-            layer_heights.append(h)
+        # Column geometry
+        col_w = (_FIG_W - 2 * _MH - (n - 1) * _COL_GAP) / n
 
-        total_h = (
-            sum(layer_heights)
-            + _LAYER_GAP * (n_layers - 1)
-            + 2 * _MARGIN
-            + 0.6  # project title
-        )
+        # Adaptive card height based on the busiest column
+        max_comps = max((len(lyr.get("components", [])) for lyr in layers), default=1)
+        max_visible = min(max_comps, _MAX_CARDS)
+        col_content_h = _FIG_H - 2 * _MV - _TITLE_H - _HDR_H - 2 * _CARD_PAD_V
+        card_h = min(_MAX_CARD_H,
+                     max(_MIN_CARD_H,
+                         (col_content_h - _CARD_GAP * (max_visible - 1)) / max(max_visible, 1)))
 
-        fig, ax = plt.subplots(figsize=(_FIG_W, total_h))
-        fig.patch.set_facecolor("#f8fafc")
-        ax.set_facecolor("#f8fafc")
+        # Icon radius — scale to card size, never too big
+        icon_r = min(0.20, card_h * 0.22, col_w * 0.20)
+
+        fig, ax = plt.subplots(figsize=(_FIG_W, _FIG_H))
+        fig.patch.set_facecolor(_BG)
+        ax.set_facecolor(_BG)
         ax.set_xlim(0, _FIG_W)
-        ax.set_ylim(0, total_h)
+        ax.set_ylim(0, _FIG_H)
         ax.axis("off")
 
-        # ── project title ──────────────────────────────────────────────
-        ax.text(
-            _FIG_W / 2, total_h - _MARGIN * 0.6,
-            result.project_name,
-            ha="center", va="top",
-            fontsize=17, fontweight="bold", color="#0f172a",
-            zorder=10,
-        )
-        ax.text(
-            _FIG_W / 2, total_h - _MARGIN * 0.6 - 0.32,
-            "Architecture Overview",
-            ha="center", va="top",
-            fontsize=9, color="#64748b", style="italic",
-            zorder=10,
-        )
+        # Project title
+        ax.text(_FIG_W / 2, _FIG_H - _MV * 0.55,
+                result.project_name,
+                ha="center", va="top", fontsize=17, fontweight="bold",
+                color="#0f172a", zorder=10)
+        ax.text(_FIG_W / 2, _FIG_H - _MV * 0.55 - 0.32,
+                "Architecture Overview",
+                ha="center", va="top", fontsize=8.5, color="#64748b",
+                style="italic", zorder=10)
 
-        y_top = total_h - _MARGIN - 0.6  # top of first layer band
+        col_top = _FIG_H - _MV - _TITLE_H
+        col_bottom = _MV
+        col_h = col_top - col_bottom
 
         for i, layer in enumerate(layers):
-            lh = layer_heights[i]
             accent = layer.get("color") or DEFAULT_COLORS[i % len(DEFAULT_COLORS)]
             pastel = _PASTEL[i % len(_PASTEL)]
-            y_bottom = y_top - lh
-            band_x = _LAYER_ACCENT_W
-            band_w = _FIG_W - _LAYER_ACCENT_W
-
-            # ── layer band background ──────────────────────────────────
-            band = FancyBboxPatch(
-                (0, y_bottom), _FIG_W, lh,
-                boxstyle="round,pad=0.05",
-                facecolor=pastel,
-                edgecolor=accent + "55",
-                linewidth=1.2,
-                zorder=1,
-            )
-            ax.add_patch(band)
-
-            # left accent bar
-            accent_bar = mpatches.Rectangle(
-                (0, y_bottom), _LAYER_ACCENT_W, lh,
-                facecolor=accent, edgecolor="none", zorder=2,
-            )
-            ax.add_patch(accent_bar)
-
-            # ── layer title ────────────────────────────────────────────
-            title_y = y_top - _LAYER_VPAD - _TITLE_H / 2
-            ax.text(
-                band_x + _LAYER_HPAD, title_y,
-                layer["name"],
-                ha="left", va="center",
-                fontsize=11, fontweight="bold", color="#0f172a",
-                zorder=4,
-            )
-
-            # layer description (right, italic, dimmed)
-            desc = layer.get("description", "")
-            if desc:
-                short = desc[:80] + ("…" if len(desc) > 80 else "")
-                ax.text(
-                    _FIG_W - 0.3, title_y,
-                    short,
-                    ha="right", va="center",
-                    fontsize=7.5, style="italic", color="#64748b",
-                    zorder=4,
-                )
-
-            # divider line under title
-            div_y = y_top - _LAYER_VPAD - _TITLE_H
-            ax.plot(
-                [band_x + _LAYER_HPAD, _FIG_W - _LAYER_HPAD],
-                [div_y, div_y],
-                color=accent + "55", linewidth=0.8, zorder=3,
-            )
-
-            # ── component cards ────────────────────────────────────────
             components = layer.get("components", [])
-            if components:
-                n_cols = min(len(components), _MAX_PER_ROW)
-                # center cards horizontally within the band
-                total_cards_w = n_cols * _COMP_W + (n_cols - 1) * _COMP_GAP_X
-                x_start = band_x + (band_w - total_cards_w) / 2
-                cards_y_top = div_y - _COMP_GAP_Y
 
-                for j, comp in enumerate(components):
-                    row = j // n_cols
-                    col = j % n_cols
-                    cx = x_start + col * (_COMP_W + _COMP_GAP_X)
-                    cy_top = cards_y_top - row * (_COMP_H + _COMP_GAP_Y)
-                    cy_bottom = cy_top - _COMP_H
+            x0 = _MH + i * (col_w + _COL_GAP)
 
-                    # card background
-                    card = FancyBboxPatch(
-                        (cx, cy_bottom), _COMP_W, _COMP_H,
-                        boxstyle="round,pad=0.04",
-                        facecolor="white",
-                        edgecolor=accent + "88",
-                        linewidth=1.0,
-                        zorder=3,
-                    )
-                    ax.add_patch(card)
+            # ── Column background ─────────────────────────────────────
+            ax.add_patch(FancyBboxPatch(
+                (x0, col_bottom), col_w, col_h,
+                boxstyle="round,pad=0.05",
+                facecolor=pastel, edgecolor=accent + "55",
+                linewidth=0.9, zorder=1))
 
-                    # tech badge (top-right corner of card)
-                    tech_raw = comp.get("tech", "")
-                    abbr = self._tech_abbr(tech_raw)
-                    badge_color = accent
-                    badge_x = cx + _COMP_W - 0.08
-                    badge_y = cy_top - 0.1
-                    if abbr:
-                        badge_rect = FancyBboxPatch(
-                            (badge_x - 0.32, badge_y - 0.22), 0.32, 0.22,
-                            boxstyle="round,pad=0.02",
-                            facecolor=badge_color,
-                            edgecolor="none",
-                            zorder=5,
-                        )
-                        ax.add_patch(badge_rect)
-                        ax.text(
-                            badge_x - 0.16, badge_y - 0.11,
-                            abbr,
-                            ha="center", va="center",
-                            fontsize=6, fontweight="bold", color="white",
-                            zorder=6,
-                        )
+            # ── Column header (colored) ───────────────────────────────
+            ax.add_patch(FancyBboxPatch(
+                (x0, col_top - _HDR_H), col_w, _HDR_H,
+                boxstyle="round,pad=0.05",
+                facecolor=accent, edgecolor="none", zorder=2))
 
-                    # component name (centered, bold)
-                    name = comp.get("name", "")
-                    wrap_w = max(14, int(_COMP_W * 8))
-                    name_lines = textwrap.wrap(name, width=wrap_w)[:2]
-                    name_y = (cy_top + cy_bottom) / 2 + 0.1
-                    ax.text(
-                        cx + _COMP_W / 2, name_y,
-                        "\n".join(name_lines),
-                        ha="center", va="center",
-                        fontsize=8.5, fontweight="bold", color="#1e293b",
-                        linespacing=1.3, zorder=4,
-                    )
+            wrap_w = max(8, int(col_w * 7.5))
+            name_lines = textwrap.wrap(layer["name"], width=wrap_w)[:2]
+            ax.text(x0 + col_w / 2, col_top - _HDR_H / 2,
+                    "\n".join(name_lines),
+                    ha="center", va="center",
+                    fontsize=min(9.0, 7.0 + col_w * 0.55),
+                    fontweight="bold", color="white",
+                    linespacing=1.2, zorder=3)
 
-                    # tech label below name
-                    if tech_raw:
-                        ax.text(
-                            cx + _COMP_W / 2, cy_bottom + 0.14,
-                            tech_raw[:26],
+            # ── Arrow from previous column ────────────────────────────
+            if i > 0:
+                arr_y = col_top - _HDR_H / 2
+                ax.annotate("",
+                            xy=(x0 - 0.07, arr_y),
+                            xytext=(x0 - _COL_GAP + 0.07, arr_y),
+                            arrowprops=dict(
+                                arrowstyle="->, head_width=0.18, head_length=0.10",
+                                color="#94a3b8", lw=1.5),
+                            zorder=5)
+
+            # ── Component cards ───────────────────────────────────────
+            visible = components[:_MAX_CARDS]
+            hidden = len(components) - len(visible)
+
+            card_w = col_w - 2 * _CARD_PAD_H
+            card_x = x0 + _CARD_PAD_H
+            card_top_start = col_top - _HDR_H - _CARD_PAD_V
+
+            icon_area_frac = 0.46
+            icon_area_h = card_h * icon_area_frac
+
+            for j, comp in enumerate(visible):
+                cy_top = card_top_start - j * (card_h + _CARD_GAP)
+                cy_bot = cy_top - card_h
+
+                # Card
+                ax.add_patch(FancyBboxPatch(
+                    (card_x, cy_bot), card_w, card_h,
+                    boxstyle="round,pad=0.03",
+                    facecolor="white", edgecolor=accent + "77",
+                    linewidth=0.9, zorder=3))
+
+                # Icon (upper portion of card)
+                icon_cx = card_x + card_w / 2
+                icon_cy = cy_top - icon_area_h / 2
+                _draw_icon(ax, icon_cx, icon_cy,
+                           _resolve_icon_type(comp), accent, r=icon_r)
+
+                # Component name (below icon)
+                name_text = comp.get("name", "")
+                nwrap = max(8, int(card_w * 7))
+                name_lines_comp = textwrap.wrap(name_text, width=nwrap)[:2]
+                ax.text(card_x + card_w / 2,
+                        cy_top - icon_area_h - 0.03,
+                        "\n".join(name_lines_comp),
+                        ha="center", va="top",
+                        fontsize=min(7.8, 5.8 + col_w * 0.45),
+                        fontweight="bold", color="#1e293b",
+                        linespacing=1.2, zorder=4)
+
+                # Tech label (bottom of card)
+                tech = comp.get("tech", "")
+                if tech:
+                    ax.text(card_x + card_w / 2, cy_bot + 0.09,
+                            tech[:22],
                             ha="center", va="bottom",
-                            fontsize=7, color="#64748b", style="italic",
-                            zorder=4,
-                        )
+                            fontsize=min(6.8, 5.2 + col_w * 0.35),
+                            color=accent, style="italic", zorder=4)
 
-            # ── arrow to next layer ────────────────────────────────────
-            if i < n_layers - 1:
-                arrow_x = _FIG_W / 2
-                arrow_y_start = y_bottom
-                arrow_y_end = y_bottom - _LAYER_GAP
-                ax.annotate(
-                    "",
-                    xy=(arrow_x, arrow_y_end + 0.06),
-                    xytext=(arrow_x, arrow_y_start),
-                    arrowprops=dict(
-                        arrowstyle="->, head_width=0.22, head_length=0.1",
-                        color="#94a3b8",
-                        lw=1.6,
-                        connectionstyle="arc3,rad=0",
-                    ),
-                    zorder=5,
-                )
+            # "+N more" if truncated
+            if hidden:
+                more_y = (card_top_start
+                          - len(visible) * (card_h + _CARD_GAP)
+                          - 0.06)
+                ax.text(x0 + col_w / 2, more_y,
+                        f"+{hidden} more…",
+                        ha="center", va="top",
+                        fontsize=7, color="#94a3b8", zorder=4)
 
-            y_top = y_bottom - _LAYER_GAP
-
+        # Save
         output_path = Path(self.output_dir) / filename
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        plt.savefig(
-            str(output_path), dpi=_DPI, bbox_inches="tight",
-            facecolor=fig.get_facecolor(), pad_inches=0.25,
-        )
+        plt.savefig(str(output_path), dpi=_DPI, bbox_inches="tight",
+                    facecolor=fig.get_facecolor(), pad_inches=0.22)
         plt.close()
         return str(output_path)
 
     # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    def _tech_abbr(self, tech: str) -> str:
-        """Return a 2-char abbreviation for the tech label, or empty string."""
-        if not tech:
-            return ""
-        key = tech.lower().strip()
-        for k, v in _TECH_ABBR.items():
-            if k in key:
-                return v
-        # fallback: first 2 uppercase chars
-        letters = [c for c in tech if c.isalpha()]
-        return "".join(letters[:2]).upper() if letters else ""
-
-    # ------------------------------------------------------------------
-    # Mermaid generation
+    # Mermaid
     # ------------------------------------------------------------------
 
     def generate_mermaid(self, result: AnalysisResult) -> str:
-        """Return a Mermaid flowchart markup string with per-layer colors."""
-        lines = ["flowchart TD"]
+        """Return Mermaid flowchart markup with per-layer colors."""
+        lines = ["flowchart LR"]   # left-right to match landscape orientation
         prev_id = None
         style_lines: list[str] = []
 
