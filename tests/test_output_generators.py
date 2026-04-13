@@ -1,6 +1,6 @@
 """
-Smoke tests for DocxGenerator and PdfGenerator.
-Verifies that both generators can be imported, instantiated, and produce
+Smoke tests for DocxGenerator, PdfGenerator and MarkdownGenerator.
+Verifies that all generators can be imported, instantiated, and produce
 output files without errors using a minimal AnalysisResult fixture.
 These tests catch ImportError / missing-dependency regressions early.
 """
@@ -91,3 +91,78 @@ class TestPdfGenerator:
         gen = PdfGenerator(output_dir=str(tmp_path), language="pt")
         path = gen.generate(minimal_result)
         assert Path(path).exists()
+
+
+class TestMarkdownGenerator:
+    def test_import(self):
+        from src.output import MarkdownGenerator
+        assert MarkdownGenerator is not None
+
+    def test_instantiates(self, tmp_path):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path))
+        assert gen.output_dir == str(tmp_path)
+
+    def test_generate_creates_md_file(self, tmp_path, minimal_result):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path), language="en")
+        path = gen.generate(minimal_result)
+        assert Path(path).exists()
+        assert path.endswith(".md")
+
+    def test_generate_pt_creates_md_file(self, tmp_path, minimal_result):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path), language="pt")
+        path = gen.generate(minimal_result)
+        assert Path(path).exists()
+
+    def test_md_contains_project_name(self, tmp_path, minimal_result):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path), language="en")
+        path = gen.generate(minimal_result)
+        content = Path(path).read_text(encoding="utf-8")
+        assert "# TestProject" in content
+
+    def test_md_contains_layer_name(self, tmp_path, minimal_result):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path), language="en")
+        path = gen.generate(minimal_result)
+        content = Path(path).read_text(encoding="utf-8")
+        assert "### Ingestion" in content
+
+    def test_md_contains_component_table(self, tmp_path, minimal_result):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path), language="en")
+        path = gen.generate(minimal_result)
+        content = Path(path).read_text(encoding="utf-8")
+        assert "| **Scanner**" in content
+
+    def test_md_contains_mermaid_when_provided(self, tmp_path, minimal_result):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path), language="en")
+        fake_mermaid = "flowchart LR\n    l1[\"Ingestion\"]"
+        path = gen.generate(minimal_result, mermaid=fake_mermaid)
+        content = Path(path).read_text(encoding="utf-8")
+        assert "```mermaid" in content
+        assert "flowchart LR" in content
+
+    def test_md_info_block_uses_blockquote(self, tmp_path, minimal_result):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path), language="en")
+        path = gen.generate(minimal_result)
+        content = Path(path).read_text(encoding="utf-8")
+        assert any(line.startswith(">") for line in content.splitlines())
+
+    def test_md_contains_good_practices(self, tmp_path, minimal_result):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path), language="en")
+        path = gen.generate(minimal_result)
+        content = Path(path).read_text(encoding="utf-8")
+        assert "Uses type hints" in content
+
+    def test_md_contains_improvement_points(self, tmp_path, minimal_result):
+        from src.output import MarkdownGenerator
+        gen = MarkdownGenerator(output_dir=str(tmp_path), language="en")
+        path = gen.generate(minimal_result)
+        content = Path(path).read_text(encoding="utf-8")
+        assert "Add more tests" in content

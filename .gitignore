@@ -15,8 +15,8 @@ build/
 .pytest_cache/
 .mypy_cache/
 
-# Output files (generated)
-output/
+# Output files (generated) -- /output anchors to repo root, not src/output
+/output/
 *.docx
 *.pdf
 *.png
