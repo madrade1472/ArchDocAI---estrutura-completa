@@ -31,7 +31,7 @@ class LLMConfig:
     model: str
     base_url: str | None = None
     max_tokens: int = 16384
-    temperature: float = 0.2
+    temperature: float = 0.0
 
 
 @dataclass

@@ -41,6 +41,11 @@ class LayerSchema(BaseModel):
             return "#4578a0"
         return v
 
+    @field_validator("components", mode="before")
+    @classmethod
+    def cap_components(cls, v):
+        return v[:6] if isinstance(v, list) else v
+
 class LLMResponseSchema(BaseModel):
     project_name: str = "Unknown Project"
     description: str = ""
@@ -49,6 +54,26 @@ class LLMResponseSchema(BaseModel):
     good_practices: list[str] = Field(default_factory=list)
     improvement_points: list[str] = Field(default_factory=list)
     validation_questions: list[str] = Field(default_factory=list)
+
+    @field_validator("tech_stack", mode="before")
+    @classmethod
+    def cap_tech_stack(cls, v):
+        return v[:8] if isinstance(v, list) else v
+
+    @field_validator("layers", mode="before")
+    @classmethod
+    def cap_layers(cls, v):
+        return v[:7] if isinstance(v, list) else v
+
+    @field_validator("good_practices", "improvement_points", mode="before")
+    @classmethod
+    def cap_lists(cls, v):
+        return v[:5] if isinstance(v, list) else v
+
+    @field_validator("validation_questions", mode="before")
+    @classmethod
+    def cap_questions(cls, v):
+        return v[:2] if isinstance(v, list) else v
 
 SYSTEM_PROMPT_PT = """Você é um arquiteto de dados e software sênior especialista em documentação técnica.
 Sua função é analisar projetos de engenharia e produzir:
@@ -67,21 +92,32 @@ Your role is to analyze engineering projects and produce:
 Always respond with valid JSON when requested. Be precise, technical, and objective."""
 
 ANALYSIS_SCHEMA = """
-Return a JSON object with this exact structure:
+Return a JSON object with this exact structure. Respect ALL limits below — do NOT exceed them.
+
+STRICT LIMITS:
+- description: exactly 2-3 sentences, no more
+- tech_stack: 5 to 8 items max
+- layers: 3 to 7 layers (merge minor layers if needed)
+- components per layer: 3 to 6 items max (pick the most architecturally relevant)
+- good_practices: exactly 3 to 5 items
+- improvement_points: exactly 3 to 5 items
+- validation_questions: exactly 2 items
+- All text values: one sentence max, no bullet points inside strings
+
 {
   "project_name": "string",
   "description": "2-3 sentence project summary",
-  "tech_stack": ["list of main technologies"],
+  "tech_stack": ["up to 8 main technologies"],
   "layers": [
     {
       "id": "layer_1",
       "name": "Layer display name",
-      "description": "What this layer does",
+      "description": "One sentence: what this layer does",
       "color": "#hex_color",
       "components": [
         {
           "name": "Component name",
-          "description": "What it does",
+          "description": "One sentence: what it does",
           "tech": "Technology used",
           "type": "source|process|store|api|ui|infra"
         }
@@ -89,12 +125,9 @@ Return a JSON object with this exact structure:
       "connections_to": ["layer_2"]
     }
   ],
-  "good_practices": ["list of good practices observed"],
-  "improvement_points": ["list of things that could be improved"],
-  "validation_questions": [
-    "Question to confirm understanding of a specific part",
-    "Question about an ambiguous architectural decision"
-  ]
+  "good_practices": ["3 to 5 items"],
+  "improvement_points": ["3 to 5 items"],
+  "validation_questions": ["exactly 2 questions"]
 }
 """
 
