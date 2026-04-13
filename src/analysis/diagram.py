@@ -498,6 +498,13 @@ class DiagramGenerator:
 
     def generate_mermaid(self, result: AnalysisResult) -> str:
         """Return Mermaid flowchart markup with per-layer colors."""
+        import re as _re
+
+        def _safe_id(text: str, prefix: str, index: int) -> str:
+            """Build a collision-free Mermaid node ID from arbitrary text."""
+            slug = _re.sub(r"[^a-z0-9]", "_", text.lower())[:12].strip("_")
+            return f"{prefix}_{index}_{slug}"
+
         lines = ["flowchart LR"]   # left-right to match landscape orientation
         prev_id = None
         style_lines: list[str] = []
@@ -512,8 +519,8 @@ class DiagramGenerator:
                 f"    style {lid} fill:{color},stroke:#ffffff22,color:#ffffff,font-weight:bold"
             )
 
-            for comp in layer.get("components", []):
-                cid = lid + "_" + comp["name"].replace(" ", "_").lower()[:15]
+            for j, comp in enumerate(layer.get("components", [])):
+                cid = _safe_id(comp["name"], lid, j)
                 clabel = comp["name"].replace('"', "'")
                 lines.append(f'    {cid}["{clabel}"]')
                 lines.append(f"    {lid} --> {cid}")
