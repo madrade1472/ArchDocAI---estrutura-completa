@@ -208,9 +208,10 @@ class ArchitectureAnalyzer:
             raise ValueError("No JSON object found")
 
         chunk = text[start:]
-        stack: list[str] = []  # tracks opening chars in order: '{' or '['
+        stack: list[str] = []
         in_string = False
         escape = False
+        after_colon = False   # True when last structural token was ':'
 
         for i, ch in enumerate(chunk):
             if escape:
@@ -220,31 +221,57 @@ class ArchitectureAnalyzer:
                 escape = True
                 continue
             if ch == '"':
-                in_string = not in_string
+                if in_string:
+                    in_string = False
+                    after_colon = False  # string value/key is done
+                else:
+                    in_string = True
                 continue
             if in_string:
                 continue
 
-            if ch == "{":
-                stack.append("{")
-            elif ch == "[":
-                stack.append("[")
+            if ch in "{[":
+                stack.append(ch)
+                after_colon = False
             elif ch == "}":
                 if stack and stack[-1] == "{":
                     stack.pop()
+                after_colon = False
                 if not stack:
-                    # Found the complete outermost object
                     return json.loads(chunk[: i + 1])
             elif ch == "]":
                 if stack and stack[-1] == "[":
                     stack.pop()
+                after_colon = False
+            elif ch == ":":
+                after_colon = True
+            elif ch == ",":
+                after_colon = False
 
-        # Truncated - close open structures in reverse order
-        suffix = '"' if in_string else ""
+        # Strip only trailing commas (never colons — they belong to the key before null)
+        tail = chunk.rstrip()
+        while tail and tail[-1] == ",":
+            tail = tail[:-1].rstrip()
+
+        suffix = ""
+        if in_string:
+            suffix += '"'           # close the open string
+            if not after_colon:
+                # The open string was a KEY (we never saw ':' after it) -> add a null value
+                suffix += ": null"
+        elif after_colon:
+            # Truncated right after ':', no value was written -> insert null
+            suffix += "null"
+
         for opener in reversed(stack):
             suffix += "}" if opener == "{" else "]"
 
-        return json.loads(chunk + suffix)
+        try:
+            return json.loads(tail + suffix)
+        except json.JSONDecodeError:
+            # Last resort: strip back to last clean value and close containers
+            closer = "".join("}" if o == "{" else "]" for o in reversed(stack))
+            return json.loads(tail + closer)
 
     def _build_result(self, data: dict) -> AnalysisResult:
         try:
