@@ -248,6 +248,118 @@
       .row, .two-col { grid-template-columns: 1fr; }
       .hero { padding: 2.5rem 1.2rem 2rem; }
     }
+
+    /* ── Interactive diagram button ─────────────────────── */
+    .btn-interactive {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: #1a1f2e;
+      border: 1px solid #4578a0;
+      color: #7db9e8;
+      padding: 0.55rem 1.1rem;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 0.88rem;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      margin-top: 0.75rem;
+    }
+    .btn-interactive:hover { background: #1d3557; border-color: #7db9e8; }
+
+    /* ── Full-screen modal overlay ──────────────────────── */
+    #cy-modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.92);
+      z-index: 1000;
+      flex-direction: column;
+    }
+    #cy-modal.open { display: flex; }
+
+    #cy-topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.25rem;
+      background: #0d1117;
+      border-bottom: 1px solid #21262d;
+      flex-shrink: 0;
+    }
+    #cy-topbar .cy-title {
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #e6edf3;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    #cy-topbar .cy-title span { color: #4578a0; font-size: 0.78rem; font-weight: 400; }
+
+    .cy-controls {
+      display: flex;
+      gap: 0.4rem;
+      align-items: center;
+    }
+    .cy-btn {
+      background: #161b22;
+      border: 1px solid #30363d;
+      color: #8b949e;
+      width: 32px; height: 32px;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 1rem;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.12s, color 0.12s;
+    }
+    .cy-btn:hover { background: #21262d; color: #e6edf3; }
+    .cy-btn.close-btn { width: auto; padding: 0 0.9rem; font-size: 0.82rem; font-weight: 600; color: #f08080; border-color: #6b2020; }
+    .cy-btn.close-btn:hover { background: #2a1010; }
+
+    #cy-container {
+      flex: 1;
+      background: #0a0e17;
+      position: relative;
+      overflow: hidden;
+    }
+    #cy { width: 100%; height: 100%; }
+
+    #cy-tooltip {
+      position: absolute;
+      background: #161b22;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 0.6rem 0.9rem;
+      font-size: 0.8rem;
+      color: #e6edf3;
+      pointer-events: none;
+      display: none;
+      z-index: 100;
+      max-width: 220px;
+    }
+    #cy-tooltip .tt-title { font-weight: 700; margin-bottom: 0.2rem; }
+    #cy-tooltip .tt-tech  { color: #8b949e; font-size: 0.75rem; }
+    #cy-tooltip .tt-desc  { color: #aac4e0; font-size: 0.75rem; margin-top: 0.2rem; line-height: 1.4; }
+
+    #cy-legend {
+      position: absolute;
+      bottom: 1rem;
+      left: 1rem;
+      background: #0d111799;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 0.6rem 0.9rem;
+      font-size: 0.75rem;
+      color: #8b949e;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+      backdrop-filter: blur(4px);
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.5rem; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .legend-line { width: 20px; height: 2px; flex-shrink: 0; }
   </style>
 </head>
 <body>
@@ -390,6 +502,215 @@
   </div>
 </main>
 
+<!-- ── Cytoscape.js Interactive Diagram Modal ─────────────────────────── -->
+<div id="cy-modal">
+  <div id="cy-topbar">
+    <div class="cy-title">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4578a0" stroke-width="2.2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+      Diagrama Interativo
+      <span id="cy-proj-title"></span>
+    </div>
+    <div class="cy-controls">
+      <button class="cy-btn" id="cy-fit" title="Ajustar ao ecrã">⊞</button>
+      <button class="cy-btn" id="cy-zoom-in" title="Zoom +">+</button>
+      <button class="cy-btn" id="cy-zoom-out" title="Zoom −">−</button>
+      <button class="cy-btn close-btn" id="cy-close">✕ Fechar</button>
+    </div>
+  </div>
+
+  <div id="cy-container">
+    <div id="cy"></div>
+    <div id="cy-tooltip">
+      <div class="tt-title" id="tt-title"></div>
+      <div class="tt-tech"  id="tt-tech"></div>
+      <div class="tt-desc"  id="tt-desc"></div>
+    </div>
+    <div id="cy-legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#4578a0"></div> Camada</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#4578a066;border:1px solid #4578a0"></div> Componente</div>
+      <div class="legend-item"><div class="legend-line" style="background:#4578a0"></div> Fluxo</div>
+      <div class="legend-item"><div class="legend-line" style="background:#4578a044;border-top:1px dashed #4578a0;height:0"></div> Pertence</div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+
+<script>
+  // ── Cytoscape setup ────────────────────────────────────────────────
+  let _cyInstance = null;
+  let _graphData  = null;
+
+  function openInteractiveDiagram(graphData) {
+    _graphData = graphData;
+    document.getElementById('cy-proj-title').textContent = '— ' + (graphData.project_name || '');
+    document.getElementById('cy-modal').classList.add('open');
+    document.body.style.overflow = 'hidden';
+
+    // Destroy previous instance
+    if (_cyInstance) { _cyInstance.destroy(); _cyInstance = null; }
+
+    // Build elements
+    const elements = [
+      ...graphData.nodes,
+      ...graphData.edges,
+    ];
+
+    _cyInstance = cytoscape({
+      container: document.getElementById('cy'),
+      elements,
+      style: [
+        // Layer nodes
+        {
+          selector: '.layer-node',
+          style: {
+            'label': 'data(label)',
+            'shape': 'round-rectangle',
+            'background-color': 'data(color)',
+            'background-opacity': 0.9,
+            'border-width': 0,
+            'color': '#ffffff',
+            'font-size': '13px',
+            'font-weight': 'bold',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-wrap': 'wrap',
+            'text-max-width': '140px',
+            'width': '160px',
+            'height': '48px',
+            'padding': '10px',
+            'text-outline-width': 0,
+          },
+        },
+        // Component nodes
+        {
+          selector: '.comp-node',
+          style: {
+            'label': 'data(label)',
+            'shape': 'round-rectangle',
+            'background-color': '#0a0e17',
+            'background-opacity': 1,
+            'border-width': 1.5,
+            'border-color': 'data(color)',
+            'color': '#e6edf3',
+            'font-size': '11px',
+            'text-valign': 'center',
+            'text-halign': 'center',
+            'text-wrap': 'wrap',
+            'text-max-width': '110px',
+            'width': '130px',
+            'height': '38px',
+          },
+        },
+        // Flow edges (layer → layer)
+        {
+          selector: '.flow-edge',
+          style: {
+            'line-color': 'data(color)',
+            'target-arrow-color': 'data(color)',
+            'target-arrow-shape': 'triangle',
+            'arrow-scale': 1.2,
+            'width': 2.5,
+            'curve-style': 'bezier',
+            'opacity': 0.85,
+          },
+        },
+        // Member edges (layer → component)
+        {
+          selector: '.member-edge',
+          style: {
+            'line-color': 'data(color)',
+            'target-arrow-color': 'data(color)',
+            'target-arrow-shape': 'vee',
+            'arrow-scale': 0.9,
+            'width': 1,
+            'line-style': 'dashed',
+            'line-dash-pattern': [6, 4],
+            'curve-style': 'bezier',
+            'opacity': 0.45,
+          },
+        },
+        // Hover state
+        {
+          selector: 'node:active, node.hovered',
+          style: {
+            'overlay-opacity': 0.15,
+            'overlay-color': '#ffffff',
+          },
+        },
+      ],
+      layout: {
+        name: 'dagre',
+        rankDir: 'LR',
+        nodeSep: 40,
+        edgeSep: 20,
+        rankSep: 100,
+        padding: 40,
+        fit: true,
+        animate: true,
+        animationDuration: 500,
+      },
+      userZoomingEnabled: true,
+      userPanningEnabled: true,
+      boxSelectionEnabled: false,
+      minZoom: 0.15,
+      maxZoom: 3,
+    });
+
+    // ── Tooltip on node hover
+    const tooltip  = document.getElementById('cy-tooltip');
+    const ttTitle  = document.getElementById('tt-title');
+    const ttTech   = document.getElementById('tt-tech');
+    const ttDesc   = document.getElementById('tt-desc');
+
+    _cyInstance.on('mouseover', 'node', e => {
+      const d = e.target.data();
+      ttTitle.textContent = d.label || '';
+      ttTech.textContent  = d.tech ? '⚙ ' + d.tech : '';
+      ttDesc.textContent  = d.description || '';
+      ttDesc.style.display = d.description ? '' : 'none';
+      tooltip.style.display = 'block';
+      e.target.addClass('hovered');
+    });
+
+    _cyInstance.on('mousemove', 'node', e => {
+      const pos = e.renderedPosition;
+      const rect = document.getElementById('cy-container').getBoundingClientRect();
+      let x = pos.x + 14;
+      let y = pos.y + 10;
+      if (x + 230 > rect.width)  x = pos.x - 234;
+      if (y + 100 > rect.height) y = pos.y - 104;
+      tooltip.style.left = x + 'px';
+      tooltip.style.top  = y + 'px';
+    });
+
+    _cyInstance.on('mouseout', 'node', e => {
+      tooltip.style.display = 'none';
+      e.target.removeClass('hovered');
+    });
+  }
+
+  function closeModal() {
+    document.getElementById('cy-modal').classList.remove('open');
+    document.body.style.overflow = '';
+    document.getElementById('cy-tooltip').style.display = 'none';
+  }
+
+  document.getElementById('cy-close').addEventListener('click', closeModal);
+  document.getElementById('cy-fit').addEventListener('click', () => _cyInstance?.fit(undefined, 40));
+  document.getElementById('cy-zoom-in').addEventListener('click', () => {
+    if (_cyInstance) _cyInstance.zoom({ level: _cyInstance.zoom() * 1.25, renderedPosition: { x: _cyInstance.width() / 2, y: _cyInstance.height() / 2 } });
+  });
+  document.getElementById('cy-zoom-out').addEventListener('click', () => {
+    if (_cyInstance) _cyInstance.zoom({ level: _cyInstance.zoom() * 0.8, renderedPosition: { x: _cyInstance.width() / 2, y: _cyInstance.height() / 2 } });
+  });
+
+  // Close on Escape
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
+</script>
+
 <script>
   // Provider -> default model + show/hide base_url row
   const modelMap = { openai: 'gpt-4o', anthropic: 'claude-sonnet-4-6', custom: '' };
@@ -519,6 +840,22 @@
         <div class="section-title">Diagrama</div>
         <img src="${data.files.diagram}?t=${Date.now()}" alt="Architecture Diagram" />
       `;
+    }
+
+    // Interactive diagram button
+    if (data.interactive_graph) {
+      const btn = document.createElement('button');
+      btn.className = 'btn-interactive';
+      btn.innerHTML = `
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/>
+          <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/>
+          <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/>
+        </svg>
+        Ver Diagrama Interativo
+      `;
+      btn.addEventListener('click', () => openInteractiveDiagram(data.interactive_graph));
+      diagDiv.appendChild(btn);
     }
 
     // Lists

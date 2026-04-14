@@ -282,6 +282,7 @@ def _run_analysis(
         diagram_gen = DiagramGenerator(output_dir=str(output_dir_run))
         diagram_path = diagram_gen.generate_png(analysis)
         mermaid = diagram_gen.generate_mermaid(analysis)
+        interactive_graph = diagram_gen.generate_interactive_json(analysis)
 
         _jobs.update(job_id, step="Gerando documentos (.docx, PDF e Markdown)...")
         docx_path = DocxGenerator(output_dir=str(output_dir_run), language=language).generate(
@@ -311,6 +312,7 @@ def _run_analysis(
                 "improvement_points": analysis.improvement_points,
                 "validation_questions": analysis.validation_questions,
                 "mermaid": mermaid,
+                "interactive_graph": interactive_graph,
                 "files_scanned": summary["total_files"],
                 "files": {
                     "diagram": rel(diagram_path),

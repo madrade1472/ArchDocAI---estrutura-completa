@@ -496,6 +496,71 @@ class DiagramGenerator:
     # Mermaid
     # ------------------------------------------------------------------
 
+    def generate_interactive_json(self, result: AnalysisResult) -> dict:
+        """Return Cytoscape.js-compatible nodes/edges for the interactive diagram."""
+        import re as _re
+
+        def _safe_id(text: str, prefix: str, index: int) -> str:
+            slug = _re.sub(r"[^a-z0-9]", "_", text.lower())[:14].strip("_")
+            return f"{prefix}_{index}_{slug}"
+
+        nodes: list[dict] = []
+        edges: list[dict] = []
+
+        for i, layer in enumerate(result.layers):
+            color = layer.get("color") or DEFAULT_COLORS[i % len(DEFAULT_COLORS)]
+            lid = layer["id"]
+
+            nodes.append({
+                "data": {
+                    "id": lid,
+                    "label": layer["name"],
+                    "type": "layer",
+                    "color": color,
+                    "description": layer.get("description", ""),
+                },
+                "classes": "layer-node",
+            })
+
+            for j, comp in enumerate(layer.get("components", [])):
+                cid = _safe_id(comp.get("name", f"comp{j}"), lid, j)
+                nodes.append({
+                    "data": {
+                        "id": cid,
+                        "label": comp.get("name", ""),
+                        "tech": comp.get("tech", ""),
+                        "type": "component",
+                        "color": color,
+                        "parent_layer": lid,
+                    },
+                    "classes": "comp-node",
+                })
+                edges.append({
+                    "data": {
+                        "id": f"e_{lid}_{cid}",
+                        "source": lid,
+                        "target": cid,
+                        "type": "member",
+                        "color": color,
+                    },
+                    "classes": "member-edge",
+                })
+
+            if i > 0:
+                prev_lid = result.layers[i - 1]["id"]
+                edges.append({
+                    "data": {
+                        "id": f"e_{prev_lid}_{lid}",
+                        "source": prev_lid,
+                        "target": lid,
+                        "type": "flow",
+                        "color": color,
+                    },
+                    "classes": "flow-edge",
+                })
+
+        return {"nodes": nodes, "edges": edges, "project_name": result.project_name}
+
     def generate_mermaid(self, result: AnalysisResult) -> str:
         """Return Mermaid flowchart markup with per-layer colors."""
         import re as _re
