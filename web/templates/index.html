@@ -527,9 +527,10 @@
     </div>
     <div id="cy-legend">
       <div class="legend-item"><div class="legend-dot" style="background:#4578a0"></div> Camada</div>
-      <div class="legend-item"><div class="legend-dot" style="background:#4578a066;border:1px solid #4578a0"></div> Componente</div>
-      <div class="legend-item"><div class="legend-line" style="background:#4578a0"></div> Fluxo</div>
-      <div class="legend-item"><div class="legend-line" style="background:#4578a044;border-top:1px dashed #4578a0;height:0"></div> Pertence</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0a0e17;border:1.5px solid #4578a0"></div> Componente</div>
+      <div class="legend-item"><div class="legend-line" style="background:#4578a0;height:3px"></div> Fluxo entre camadas</div>
+      <div class="legend-item"><div class="legend-line" style="background:#4578a0;height:2px"></div> Conexão entre componentes</div>
+      <div class="legend-item"><div class="legend-line" style="background:transparent;border-top:1px dashed #4578a066;height:0"></div> Pertence à camada</div>
     </div>
   </div>
 </div>
@@ -611,25 +612,37 @@
             'line-color': 'data(color)',
             'target-arrow-color': 'data(color)',
             'target-arrow-shape': 'triangle',
-            'arrow-scale': 1.2,
-            'width': 2.5,
+            'arrow-scale': 1.3,
+            'width': 3,
             'curve-style': 'bezier',
-            'opacity': 0.85,
+            'opacity': 0.9,
           },
         },
-        // Member edges (layer → component)
+        // Component → Component edges (real data flow between components)
+        {
+          selector: '.comp-flow-edge',
+          style: {
+            'line-color': 'data(color)',
+            'target-arrow-color': 'data(color)',
+            'target-arrow-shape': 'triangle',
+            'arrow-scale': 1.0,
+            'width': 1.8,
+            'curve-style': 'bezier',
+            'opacity': 0.75,
+          },
+        },
+        // Member edges (layer → component, dashed thin)
         {
           selector: '.member-edge',
           style: {
             'line-color': 'data(color)',
             'target-arrow-color': 'data(color)',
-            'target-arrow-shape': 'vee',
-            'arrow-scale': 0.9,
+            'target-arrow-shape': 'none',
             'width': 1,
             'line-style': 'dashed',
-            'line-dash-pattern': [6, 4],
+            'line-dash-pattern': [5, 5],
             'curve-style': 'bezier',
-            'opacity': 0.45,
+            'opacity': 0.30,
           },
         },
         // Hover state

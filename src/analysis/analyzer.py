@@ -25,6 +25,12 @@ class ComponentSchema(BaseModel):
     description: str = ""
     tech: str = ""
     type: Literal["source", "process", "store", "api", "ui", "infra"] = "process"
+    connections_to: list[str] = Field(default_factory=list)  # names of other components this feeds into
+
+    @field_validator("connections_to", mode="before")
+    @classmethod
+    def cap_connections(cls, v):
+        return v[:6] if isinstance(v, list) else []
 
 class LayerSchema(BaseModel):
     id: str
@@ -103,6 +109,7 @@ STRICT LIMITS:
 - improvement_points: exactly 3 to 5 items
 - validation_questions: exactly 2 items
 - All text values: one sentence max, no bullet points inside strings
+- connections_to in components: use EXACT component names from OTHER layers that this component feeds data into or calls directly (max 3 per component). Leave empty [] if it truly has no downstream dependency.
 
 {
   "project_name": "string",
@@ -119,7 +126,8 @@ STRICT LIMITS:
           "name": "Component name",
           "description": "One sentence: what it does",
           "tech": "Technology used",
-          "type": "source|process|store|api|ui|infra"
+          "type": "source|process|store|api|ui|infra",
+          "connections_to": ["ExactNameOfComponentInAnotherLayer"]
         }
       ],
       "connections_to": ["layer_2"]

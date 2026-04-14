@@ -497,7 +497,14 @@ class DiagramGenerator:
     # ------------------------------------------------------------------
 
     def generate_interactive_json(self, result: AnalysisResult) -> dict:
-        """Return Cytoscape.js-compatible nodes/edges for the interactive diagram."""
+        """Return Cytoscape.js-compatible nodes/edges for the interactive diagram.
+
+        Edges generated (in priority order):
+        1. Component → Component  (from comp.connections_to — LLM-derived, most accurate)
+        2. Layer → Layer          (from layer.connections_to, falling back to sequential)
+        3. Layer → Component      (membership, dashed)
+        4. Type-based fallback    (when no comp connections exist — inferred from comp.type)
+        """
         import re as _re
 
         def _safe_id(text: str, prefix: str, index: int) -> str:
@@ -506,10 +513,29 @@ class DiagramGenerator:
 
         nodes: list[dict] = []
         edges: list[dict] = []
+        edge_ids: set[str] = set()  # dedup guard
+
+        def _add_edge(src: str, tgt: str, etype: str, color: str) -> None:
+            eid = f"e_{src}__{tgt}"
+            if eid in edge_ids or src == tgt:
+                return
+            edge_ids.add(eid)
+            edges.append({
+                "data": {"id": eid, "source": src, "target": tgt, "type": etype, "color": color},
+                "classes": f"{etype}-edge",
+            })
+
+        # ── Pass 1: build node list + name→id lookup ───────────────────
+        # name_to_id: lowercased comp name → node id  (for connections_to resolution)
+        name_to_id: dict[str, str] = {}
+        layer_color: dict[str, str] = {}
+
+        comp_records: list[tuple[str, str, dict, str]] = []  # (lid, cid, comp, color)
 
         for i, layer in enumerate(result.layers):
             color = layer.get("color") or DEFAULT_COLORS[i % len(DEFAULT_COLORS)]
             lid = layer["id"]
+            layer_color[lid] = color
 
             nodes.append({
                 "data": {
@@ -524,40 +550,90 @@ class DiagramGenerator:
 
             for j, comp in enumerate(layer.get("components", [])):
                 cid = _safe_id(comp.get("name", f"comp{j}"), lid, j)
+                name_to_id[comp.get("name", "").lower().strip()] = cid
+                comp_records.append((lid, cid, comp, color))
+
                 nodes.append({
                     "data": {
                         "id": cid,
                         "label": comp.get("name", ""),
                         "tech": comp.get("tech", ""),
+                        "comp_type": comp.get("type", "process"),
                         "type": "component",
                         "color": color,
                         "parent_layer": lid,
+                        "description": comp.get("description", ""),
                     },
                     "classes": "comp-node",
                 })
-                edges.append({
-                    "data": {
-                        "id": f"e_{lid}_{cid}",
-                        "source": lid,
-                        "target": cid,
-                        "type": "member",
-                        "color": color,
-                    },
-                    "classes": "member-edge",
-                })
 
-            if i > 0:
-                prev_lid = result.layers[i - 1]["id"]
-                edges.append({
-                    "data": {
-                        "id": f"e_{prev_lid}_{lid}",
-                        "source": prev_lid,
-                        "target": lid,
-                        "type": "flow",
-                        "color": color,
-                    },
-                    "classes": "flow-edge",
-                })
+        # ── Pass 2: membership edges (layer → its components) ──────────
+        for lid, cid, comp, color in comp_records:
+            _add_edge(lid, cid, "member", color)
+
+        # ── Pass 3: layer → layer flow edges ──────────────────────────
+        # Prefer explicit connections_to; fall back to sequential order
+        layer_ids = [l["id"] for l in result.layers]
+        connected_layers: set[tuple[str, str]] = set()
+
+        for i, layer in enumerate(result.layers):
+            lid = layer["id"]
+            targets = layer.get("connections_to", [])
+            if targets:
+                for tid in targets:
+                    if tid in layer_color:
+                        _add_edge(lid, tid, "flow", layer_color[lid])
+                        connected_layers.add((lid, tid))
+            else:
+                # Sequential fallback
+                if i > 0:
+                    prev = layer_ids[i - 1]
+                    _add_edge(prev, lid, "flow", layer_color[lid])
+                    connected_layers.add((prev, lid))
+
+        # ── Pass 4: component → component edges ───────────────────────
+        has_comp_connections = False
+        for lid, cid, comp, color in comp_records:
+            targets = comp.get("connections_to", [])
+            for target_name in targets:
+                target_id = name_to_id.get(target_name.lower().strip())
+                if target_id and target_id != cid:
+                    _add_edge(cid, target_id, "comp-flow", color)
+                    has_comp_connections = True
+
+        # ── Pass 5: type-based fallback when LLM gave no comp connections
+        if not has_comp_connections:
+            # Group comp records by layer
+            by_layer: dict[str, list[tuple[str, dict, str]]] = {}
+            for lid, cid, comp, color in comp_records:
+                by_layer.setdefault(lid, []).append((cid, comp, color))
+
+            # Output types (produce data) → Input types (consume data)
+            _output_types = {"source", "api", "process"}
+            _input_types  = {"process", "store", "api"}
+
+            for src_lid, tgt_lid in connected_layers:
+                src_comps = by_layer.get(src_lid, [])
+                tgt_comps = by_layer.get(tgt_lid, [])
+                if not src_comps or not tgt_comps:
+                    continue
+
+                # Pick best source: prefer api/process/source type
+                src_candidates = [(cid, c, col) for cid, c, col in src_comps
+                                  if c.get("type", "process") in _output_types]
+                if not src_candidates:
+                    src_candidates = src_comps[:1]
+
+                # Pick best target: prefer process/store/api type
+                tgt_candidates = [(cid, c, col) for cid, c, col in tgt_comps
+                                  if c.get("type", "process") in _input_types]
+                if not tgt_candidates:
+                    tgt_candidates = tgt_comps[:1]
+
+                # Connect up to 2 source components to up to 2 target components
+                for s_cid, _, s_col in src_candidates[:2]:
+                    for t_cid, _, _ in tgt_candidates[:2]:
+                        _add_edge(s_cid, t_cid, "comp-flow", s_col)
 
         return {"nodes": nodes, "edges": edges, "project_name": result.project_name}
 
