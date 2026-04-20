@@ -23,7 +23,8 @@ class PdfGenerator:
     output_dir: str = "./output"
     language: str = "pt"
 
-    def generate(self, result: AnalysisResult, diagram_path: str | None = None) -> str:
+    def generate(self, result: AnalysisResult, diagram_path: str | None = None,
+                 interactive_diagram_path: str | None = None) -> str:
         from reportlab.lib.pagesizes import A4
         from reportlab.lib.units import cm
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -138,7 +139,9 @@ class PdfGenerator:
                 story.append(ListFlowable(litems, bulletType="bullet"))
 
         # ── 3. Diagram ────────────────────────────────────────────────────────
-        if diagram_path and Path(diagram_path).exists():
+        has_static = diagram_path and Path(diagram_path).exists()
+        has_interactive = interactive_diagram_path and Path(interactive_diagram_path).exists()
+        if has_static or has_interactive:
             story.append(PageBreak())
             diag_label = "3. Diagrama da Arquitetura" if self.language == "pt" else "3. Architecture Diagram"
             story.append(Paragraph(diag_label, s_h1))
@@ -146,11 +149,20 @@ class PdfGenerator:
 
             from reportlab.lib.pagesizes import A4
             max_w = A4[0] - 5 * cm
-            img = Image(diagram_path, width=max_w, height=max_w * 0.7)
-            story.append(img)
+
+            if has_static:
+                story.append(Image(diagram_path, width=max_w, height=max_w * 0.7))
+
+            if has_interactive:
+                if has_static:
+                    story.append(Spacer(1, 0.6 * cm))
+                sub_label = "Diagrama Interativo (Node-Graph)" if self.language == "pt" else "Interactive Diagram (Node-Graph)"
+                story.append(Paragraph(sub_label, s_h2))
+                story.append(Spacer(1, 0.2 * cm))
+                story.append(Image(interactive_diagram_path, width=max_w, height=max_w * 0.625))
 
         # ── 4. Good Practices ─────────────────────────────────────────────────
-        next_n = 4 if diagram_path else 3
+        next_n = 4 if (has_static or has_interactive) else 3
         gp_label = f"{next_n}. Boas Práticas Identificadas" if self.language == "pt" else f"{next_n}. Good Practices"
         story.append(Paragraph(gp_label, s_h1))
         gp_items = [ListItem(Paragraph(gp, s_bullet)) for gp in result.good_practices]

@@ -637,6 +637,120 @@ class DiagramGenerator:
 
         return {"nodes": nodes, "edges": edges, "project_name": result.project_name}
 
+    def generate_interactive_png(self, result: AnalysisResult, filename: str = "architecture_interactive.png") -> str:
+        """Render the interactive node-graph as a static PNG (for embedding in docx/pdf).
+
+        Uses the same node/edge data as `generate_interactive_json` and lays it out
+        as columns (one per layer) with components stacked vertically inside each column.
+        """
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import networkx as nx
+
+        graph = self.generate_interactive_json(result)
+        nodes = graph["nodes"]
+        edges = graph["edges"]
+
+        G = nx.DiGraph()
+        layer_ids: list[str] = []
+        comp_ids: list[str] = []
+        node_color: dict[str, str] = {}
+        node_label: dict[str, str] = {}
+        comp_parent: dict[str, str] = {}
+
+        for n in nodes:
+            d = n["data"]
+            nid = d["id"]
+            G.add_node(nid)
+            node_color[nid] = d.get("color", "#475569")
+            node_label[nid] = d.get("label", "")
+            if d.get("type") == "layer":
+                layer_ids.append(nid)
+            else:
+                comp_ids.append(nid)
+                comp_parent[nid] = d.get("parent_layer", "")
+
+        for e in edges:
+            d = e["data"]
+            G.add_edge(d["source"], d["target"], etype=d.get("type"))
+
+        # Layout: layers as evenly-spaced columns; components stacked under their layer
+        pos: dict[str, tuple[float, float]] = {}
+        n_cols = max(len(layer_ids), 1)
+        for i, lid in enumerate(layer_ids):
+            x = (i + 0.5) / n_cols
+            pos[lid] = (x, 0.93)
+            children = [c for c in comp_ids if comp_parent.get(c) == lid]
+            if children:
+                top, bottom = 0.80, 0.08
+                step = (top - bottom) / max(len(children), 1)
+                for j, cid in enumerate(children):
+                    pos[cid] = (x, top - (j + 0.5) * step)
+
+        fig, ax = plt.subplots(figsize=(16, 10))
+        BG = "#0f172a"
+        fig.patch.set_facecolor(BG)
+        ax.set_facecolor(BG)
+        ax.set_xlim(-0.05, 1.05)
+        ax.set_ylim(-0.05, 1.08)
+        ax.axis("off")
+
+        member_e = [(u, v) for u, v, d in G.edges(data=True) if d.get("etype") == "member"]
+        flow_e = [(u, v) for u, v, d in G.edges(data=True) if d.get("etype") == "flow"]
+        comp_e = [(u, v) for u, v, d in G.edges(data=True) if d.get("etype") == "comp-flow"]
+
+        if member_e:
+            nx.draw_networkx_edges(G, pos, edgelist=member_e, ax=ax,
+                                    edge_color="#475569", style="dashed",
+                                    width=0.8, alpha=0.35, arrows=False)
+        if flow_e:
+            nx.draw_networkx_edges(G, pos, edgelist=flow_e, ax=ax,
+                                    edge_color="#cbd5e1", width=2.2, alpha=0.85,
+                                    arrows=True, arrowsize=18, arrowstyle="-|>",
+                                    node_size=2400)
+        if comp_e:
+            nx.draw_networkx_edges(G, pos, edgelist=comp_e, ax=ax,
+                                    edge_color="#94a3b8", width=1.2, alpha=0.6,
+                                    arrows=True, arrowsize=12, arrowstyle="-|>",
+                                    node_size=1200, connectionstyle="arc3,rad=0.12")
+
+        if layer_ids:
+            nx.draw_networkx_nodes(G, pos, nodelist=layer_ids, ax=ax,
+                                    node_size=900, node_shape="s",
+                                    node_color=[node_color[n] for n in layer_ids],
+                                    edgecolors="white", linewidths=2)
+        if comp_ids:
+            nx.draw_networkx_nodes(G, pos, nodelist=comp_ids, ax=ax,
+                                    node_size=700,
+                                    node_color=[node_color[n] for n in comp_ids],
+                                    edgecolors="white", linewidths=1.2, alpha=0.92)
+
+        # Labels go OUTSIDE the nodes (above for layers, below for components)
+        # so text never gets clipped no matter how long.
+        for lid in layer_ids:
+            x, y = pos[lid]
+            ax.text(x, y + 0.045, node_label[lid], ha="center", va="bottom",
+                    fontsize=9, fontweight="bold", color="#e2e8f0",
+                    wrap=True)
+
+        for cid in comp_ids:
+            x, y = pos[cid]
+            wrapped = "\n".join(textwrap.wrap(node_label[cid], 22))
+            ax.text(x, y - 0.025, wrapped, ha="center", va="top",
+                    fontsize=7, color="#cbd5e1")
+
+        ax.text(0.5, 1.05, result.project_name, transform=ax.transAxes,
+                ha="center", va="bottom", fontsize=15, fontweight="bold", color="#e2e8f0")
+        ax.text(0.5, -0.03, "Interactive Diagram (Node-Graph)", transform=ax.transAxes,
+                ha="center", va="top", fontsize=9, color="#94a3b8", style="italic")
+
+        out_path = Path(self.output_dir) / filename
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=BG)
+        plt.close(fig)
+        return str(out_path)
+
     def generate_mermaid(self, result: AnalysisResult) -> str:
         """Return Mermaid flowchart markup with per-layer colors."""
         import re as _re
