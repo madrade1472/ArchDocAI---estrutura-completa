@@ -462,6 +462,35 @@
 
   <div id="quota-info" style="text-align:right;font-size:0.75rem;color:var(--muted);margin-bottom:0.5rem;"></div>
 
+  <div id="estimate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.65);z-index:1000;align-items:center;justify-content:center;padding:1rem;">
+    <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;max-width:520px;width:100%;padding:1.75rem;box-shadow:0 20px 60px rgba(0,0,0,0.4);">
+      <h3 style="margin:0 0 1rem;color:var(--text);font-size:1.15rem;">Estimativa de custo</h3>
+      <div id="estimate-loading" style="display:flex;gap:0.5rem;align-items:center;color:var(--muted);font-size:0.9rem;">
+        <div class="spinner" style="width:16px;height:16px;border-width:2px;"></div>
+        Clonando repositório e contando tokens...
+      </div>
+      <div id="estimate-content" style="display:none;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
+          <div style="background:#0f172a;border:1px solid var(--border);border-radius:8px;padding:0.85rem;">
+            <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Tokens (input)</div>
+            <div id="est-tokens" style="font-size:1.4rem;font-weight:600;color:var(--text);margin-top:0.25rem;">—</div>
+          </div>
+          <div style="background:#0f172a;border:1px solid var(--border);border-radius:8px;padding:0.85rem;">
+            <div style="font-size:0.7rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.05em;">Custo estimado</div>
+            <div id="est-cost" style="font-size:1.4rem;font-weight:600;color:#10b981;margin-top:0.25rem;">—</div>
+          </div>
+        </div>
+        <div id="est-detail" style="font-size:0.8rem;color:var(--muted);line-height:1.5;margin-bottom:1.25rem;"></div>
+        <div id="est-warning" style="display:none;background:#7c2d12;border-left:3px solid #f97316;padding:0.6rem 0.85rem;border-radius:6px;font-size:0.8rem;color:#fed7aa;margin-bottom:1rem;"></div>
+        <div style="display:flex;gap:0.6rem;justify-content:flex-end;">
+          <button type="button" id="estimate-cancel" style="background:transparent;color:var(--muted);border:1px solid var(--border);padding:0.6rem 1.1rem;border-radius:8px;cursor:pointer;font-size:0.85rem;">Cancelar</button>
+          <button type="button" id="estimate-confirm" style="background:var(--accent);color:white;border:none;padding:0.6rem 1.4rem;border-radius:8px;cursor:pointer;font-size:0.85rem;font-weight:600;">Confirmar e analisar</button>
+        </div>
+      </div>
+      <div id="estimate-error" style="display:none;color:#fca5a5;background:#450a0a;padding:0.75rem;border-radius:6px;font-size:0.85rem;margin-top:0.5rem;"></div>
+    </div>
+  </div>
+
   <div id="status-box">
     <div class="spinner"></div>
     <div style="font-weight:600;font-size:1rem">Analisando repositório...</div>
@@ -786,8 +815,7 @@
     }
   }
 
-  document.getElementById('analyze-form').addEventListener('submit', async e => {
-    e.preventDefault();
+  function startAnalysis(formData) {
     const btn = document.getElementById('submit-btn');
     const statusBox = document.getElementById('status-box');
     const errorBox = document.getElementById('error-box');
@@ -799,30 +827,92 @@
     statusBox.style.display = 'block';
     document.getElementById('status-text').textContent = 'Enviando requisicao...';
 
-    try {
-      const fd = new FormData(e.target);
-      const res = await fetch('/api/analyze', { method: 'POST', body: fd });
-      const data = await res.json();
+    return fetch('/api/analyze', { method: 'POST', body: formData })
+      .then(async res => {
+        const data = await res.json();
+        if (res.status === 429) throw new Error(data.detail);
+        if (!res.ok) throw new Error(data.detail || res.statusText);
+        if (data.remaining_quota !== undefined) {
+          document.getElementById('quota-info').textContent =
+            `Requisicoes restantes nesta hora: ${data.remaining_quota}`;
+        }
+        _pollDelay = _POLL_MIN;
+        pollStatus(data.job_id);
+      })
+      .catch(err => {
+        statusBox.style.display = 'none';
+        btn.disabled = false;
+        errorBox.textContent = 'Erro: ' + err.message;
+        errorBox.style.display = 'block';
+      });
+  }
 
-      if (res.status === 429) throw new Error(data.detail);
+  document.getElementById('analyze-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const btn = document.getElementById('submit-btn');
+    const errorBox = document.getElementById('error-box');
+    const modal = document.getElementById('estimate-modal');
+    const loading = document.getElementById('estimate-loading');
+    const content = document.getElementById('estimate-content');
+    const errorEl = document.getElementById('estimate-error');
+
+    errorBox.style.display = 'none';
+    btn.disabled = true;
+    modal.style.display = 'flex';
+    loading.style.display = 'flex';
+    content.style.display = 'none';
+    errorEl.style.display = 'none';
+
+    const fd = new FormData(e.target);
+    // Estimate doesn't need the API key — strip it to avoid sending it twice
+    const estFd = new FormData();
+    for (const [k, v] of fd.entries()) if (k !== 'api_key') estFd.append(k, v);
+
+    try {
+      const res = await fetch('/api/estimate', { method: 'POST', body: estFd });
+      const data = await res.json();
       if (!res.ok) throw new Error(data.detail || res.statusText);
 
-      // Show remaining quota to the user
-      if (data.remaining_quota !== undefined) {
-        document.getElementById('quota-info').textContent =
-          `Requisicoes restantes nesta hora: ${data.remaining_quota}`;
+      const tokens = data.input_tokens.toLocaleString('pt-BR');
+      const costStr = data.pricing_known
+        ? `$${data.total_cost_usd.toFixed(4)}`
+        : 'preço desconhecido';
+      document.getElementById('est-tokens').textContent = tokens;
+      document.getElementById('est-cost').textContent = costStr;
+      document.getElementById('est-detail').innerHTML =
+        `Modelo: <strong>${data.model}</strong> · ${data.files_scanned} arquivos (${data.total_size_kb} KB)<br>` +
+        `Saída estimada em até ${data.output_tokens.toLocaleString('pt-BR')} tokens.`;
+
+      const warn = document.getElementById('est-warning');
+      if (!data.pricing_known) {
+        warn.textContent = `Preço para o modelo "${data.model}" não está catalogado. ` +
+          `Confirme manualmente o custo na página de preços do provedor antes de prosseguir.`;
+        warn.style.display = 'block';
+      } else if (data.total_cost_usd > 1) {
+        warn.textContent = `Atenção: custo estimado acima de $1.00. ` +
+          `Confirme se realmente quer prosseguir.`;
+        warn.style.display = 'block';
+      } else {
+        warn.style.display = 'none';
       }
 
-      // Immediate first check, then exponential backoff (2s -> 3s -> 4.5s -> ... -> 15s cap)
-      _pollDelay = _POLL_MIN;
-      pollStatus(data.job_id);
-
+      loading.style.display = 'none';
+      content.style.display = 'block';
     } catch (err) {
-      statusBox.style.display = 'none';
+      loading.style.display = 'none';
+      errorEl.textContent = 'Erro ao estimar: ' + err.message;
+      errorEl.style.display = 'block';
       btn.disabled = false;
-      errorBox.textContent = 'Erro: ' + err.message;
-      errorBox.style.display = 'block';
     }
+
+    document.getElementById('estimate-cancel').onclick = () => {
+      modal.style.display = 'none';
+      btn.disabled = false;
+    };
+    document.getElementById('estimate-confirm').onclick = () => {
+      modal.style.display = 'none';
+      startAnalysis(fd);
+    };
   });
 
   function renderResults(data) {

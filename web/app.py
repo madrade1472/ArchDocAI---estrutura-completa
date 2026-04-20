@@ -461,6 +461,114 @@ def create_app() -> FastAPI:
         job.pop("created_at", None)
         return JSONResponse(job)
 
+    @app.post("/api/estimate")
+    async def estimate(
+        request: Request,
+        provider: str = Form(..., max_length=20),
+        model: str = Form(..., max_length=100),
+        language: str = Form("pt", max_length=5),
+        git_url: str = Form(..., max_length=512),
+        git_branch: str = Form("", max_length=200),
+        project_name: str = Form("", max_length=200),
+    ):
+        """Pre-flight cost estimate. Clones the repo, scans, counts tokens
+        without calling the LLM. Returns input/output tokens + USD cost."""
+        if _API_KEY:
+            auth_header = request.headers.get("Authorization", "")
+            if not auth_header.startswith("Bearer ") or auth_header[7:] != _API_KEY:
+                raise HTTPException(401, "Autenticacao necessaria: Bearer token invalido ou ausente.")
+
+        client_ip = request.client.host if request.client else "unknown"
+        allowed, retry_after = _rate_limiter.check(client_ip)
+        if not allowed:
+            raise HTTPException(
+                status_code=429,
+                detail=f"Limite de requisicoes atingido. Tente novamente em {retry_after} segundos.",
+                headers={"Retry-After": str(retry_after)},
+            )
+
+        if provider not in ("openai", "anthropic", "custom"):
+            raise HTTPException(400, "provider deve ser openai, anthropic ou custom")
+        if not git_url.strip() or not _GIT_URL_RE.match(git_url.strip()):
+            raise HTTPException(
+                400,
+                "git_url invalida: use https:// ou git@ (SSH).",
+            )
+
+        from src.ingestion import ProjectContext
+        from src.analysis.analyzer import SYSTEM_PROMPT_PT, SYSTEM_PROMPT_EN, ANALYSIS_SCHEMA
+        from src.analysis.pricing import estimate_cost, DEFAULT_OUTPUT_TOKENS
+
+        tmp_dir = tempfile.mkdtemp(prefix="archdoc_est_")
+        try:
+            try:
+                _check_repo_size(git_url, "estimate", {})
+            except RuntimeError as exc:
+                raise HTTPException(400, str(exc))
+
+            cmd = ["git", "clone", "--depth=1", "--single-branch"]
+            if git_branch.strip():
+                cmd += ["--branch", git_branch.strip()]
+            clone_dir = Path(tmp_dir) / "repo"
+            cmd += [git_url.strip(), str(clone_dir)]
+
+            result_clone = subprocess.run(cmd, capture_output=True, text=True, timeout=180)
+            if result_clone.returncode != 0:
+                raise HTTPException(400, f"Git clone falhou: {_sanitize_for_error(result_clone.stderr.strip())}")
+
+            clone_size_mb = _dir_size_mb(clone_dir)
+            if clone_size_mb > _MAX_REPO_SIZE_MB:
+                raise HTTPException(
+                    400,
+                    f"Repositorio clonado ocupa {clone_size_mb:.0f} MB, limite e {_MAX_REPO_SIZE_MB} MB.",
+                )
+
+            project_root = clone_dir
+            entries = [e for e in clone_dir.iterdir() if not e.name.startswith(".")]
+            if len(entries) == 1 and entries[0].is_dir():
+                project_root = entries[0]
+
+            inferred_name = (
+                project_name.strip()
+                or Path(git_url.rstrip("/")).stem.replace("-", " ").replace("_", " ").title()
+            )
+
+            ctx = ProjectContext.from_path(str(project_root), project_name=inferred_name)
+            summary = ctx.summary()
+
+            system_prompt = SYSTEM_PROMPT_PT if language == "pt" else SYSTEM_PROMPT_EN
+            lang_note = "Responda em português brasileiro." if language == "pt" else "Respond in English."
+            user_prompt = (
+                f"{ctx.to_llm_prompt(language)}\n\n"
+                f"---\n{lang_note}\n"
+                f"Analyze the project above and return ONLY a valid JSON object following this schema:\n"
+                f"{ANALYSIS_SCHEMA}"
+            )
+            full_prompt = system_prompt + "\n\n" + user_prompt
+
+            estimate_obj = estimate_cost(
+                input_text=full_prompt,
+                model=model,
+                provider=provider,
+                output_tokens=DEFAULT_OUTPUT_TOKENS,
+            )
+
+            log.info(
+                "Estimate for %s: %d input tokens, ~$%.4f (%s)",
+                _sanitize_url(git_url),
+                estimate_obj.input_tokens,
+                estimate_obj.total_cost_usd,
+                model,
+            )
+
+            return JSONResponse({
+                **estimate_obj.to_dict(),
+                "files_scanned": summary["total_files"],
+                "total_size_kb": summary["total_size_kb"],
+            })
+        finally:
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+
     @app.get("/api/quota")
     async def quota(request: Request):
         """Return how many requests the caller still has in the current window."""
