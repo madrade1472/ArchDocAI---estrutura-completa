@@ -99,11 +99,16 @@ def analyze(
 
     # ── Step 4: Diagram ──────────────────────────────────────────────────────
     diagram_path = None
+    interactive_diagram_path = None
     if not no_diagram:
         with console.status("[bold green]Generating architecture diagram..."):
             gen = DiagramGenerator(output_dir=output_dir)
             diagram_path = gen.generate_png(result)
         console.print(f"[green]Diagram saved:[/green] {diagram_path}")
+
+        with console.status("[bold green]Generating interactive node-graph PNG..."):
+            interactive_diagram_path = gen.generate_interactive_png(result)
+        console.print(f"[green]Interactive node-graph saved:[/green] {interactive_diagram_path}")
 
         mermaid = gen.generate_mermaid(result)
         mmd_path = Path(output_dir) / f"{result.project_name.replace(' ', '_')}_diagram.mmd"
@@ -115,13 +120,15 @@ def analyze(
     if not no_docx:
         with console.status("[bold green]Generating .docx..."):
             docx_gen = DocxGenerator(output_dir=output_dir, language=language)
-            docx_path = docx_gen.generate(result, diagram_path=diagram_path)
+            docx_path = docx_gen.generate(result, diagram_path=diagram_path,
+                                          interactive_diagram_path=interactive_diagram_path)
         console.print(f"[green].docx saved:[/green] {docx_path}")
 
     if not no_pdf:
         with console.status("[bold green]Generating PDF..."):
             pdf_gen = PdfGenerator(output_dir=output_dir, language=language)
-            pdf_path = pdf_gen.generate(result, diagram_path=diagram_path)
+            pdf_path = pdf_gen.generate(result, diagram_path=diagram_path,
+                                        interactive_diagram_path=interactive_diagram_path)
         console.print(f"[green]PDF saved:[/green] {pdf_path}")
 
     if not no_md:

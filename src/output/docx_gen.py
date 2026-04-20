@@ -66,7 +66,8 @@ class DocxGenerator:
     output_dir: str = "./output"
     language: str = "pt"
 
-    def generate(self, result: AnalysisResult, diagram_path: str | None = None) -> str:
+    def generate(self, result: AnalysisResult, diagram_path: str | None = None,
+                 interactive_diagram_path: str | None = None) -> str:
         from docx import Document
         from docx.shared import Inches, Pt, RGBColor
         from docx.enum.text import WD_ALIGN_PARAGRAPH
@@ -174,14 +175,24 @@ class DocxGenerator:
                     add_bullet(f"{comp['name']}{tech_note} - {comp.get('description', '')}")
 
         # ── 3. Diagram ───────────────────────────────────────────────────────
-        if diagram_path and Path(diagram_path).exists():
+        has_any_diagram = (diagram_path and Path(diagram_path).exists()) or \
+                          (interactive_diagram_path and Path(interactive_diagram_path).exists())
+        if has_any_diagram:
             diag_title = "3. Diagrama da Arquitetura" if self.language == "pt" else "3. Architecture Diagram"
             add_section(diag_title)
-            doc.add_picture(diagram_path, width=Inches(6.5))
-            doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            if diagram_path and Path(diagram_path).exists():
+                doc.add_picture(diagram_path, width=Inches(6.5))
+                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+
+            if interactive_diagram_path and Path(interactive_diagram_path).exists():
+                sub_title = "Diagrama Interativo (Node-Graph)" if self.language == "pt" else "Interactive Diagram (Node-Graph)"
+                add_subsection(sub_title)
+                doc.add_picture(interactive_diagram_path, width=Inches(6.5))
+                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
         # ── 4. Good Practices ────────────────────────────────────────────────
-        next_n = 4 if diagram_path else 3
+        next_n = 4 if has_any_diagram else 3
         gp_title = f"{next_n}. Boas Práticas Identificadas" if self.language == "pt" else f"{next_n}. Good Practices Identified"
         add_section(gp_title)
         for gp in result.good_practices:
