@@ -2,18 +2,41 @@
 
 **Autor:** Marcus Andrade &nbsp;|&nbsp; [LinkedIn](https://www.linkedin.com/in/madrade) &nbsp;|&nbsp; [GitHub](https://github.com/madrade1472)
 
-Documentação automática de arquitetura de software e dados com IA.
-Conecte qualquer repositório Git, escolha seu LLM (Claude ou GPT) e receba um diagrama de arquitetura, um documento `.docx` e um PDF gerados automaticamente.
+Documentacao automatica de arquitetura de software e dados com IA.
+Conecte qualquer repositorio Git, escolha seu LLM (Claude ou GPT) e receba um diagrama de arquitetura, um documento `.docx` e um PDF gerados automaticamente.
 
 ---
 
 ## Como funciona
 
-1. Voce informa a URL do repositório Git
+1. Voce informa a URL do repositorio Git
 2. O sistema clona o projeto (shallow clone, sem precisar baixar o historico inteiro)
 3. Um LLM de sua escolha (Claude ou GPT) analisa os arquivos e identifica as camadas da arquitetura
 4. O sistema valida com voce se o entendimento esta correto
-5. Sao gerados: diagrama PNG, documento Word e PDF com a documentacao tecnica completa
+5. Sao gerados: diagrama PNG, diagrama interativo, documento Word e PDF com a documentacao tecnica completa
+
+---
+
+## Novidades (v1.5)
+
+### Diagrama Interativo Node-Graph
+
+Alem do diagrama PNG estatico, agora existe uma visualizacao interativa no browser:
+
+- Fundo escuro com nos coloridos por camada
+- Conexoes reais entre componentes mapeadas pelo LLM
+- Drag, pan e zoom livres
+- Tooltip com nome, tecnologia e descricao ao passar o mouse
+- Botoes de zoom e ajuste de tela
+- Fechar com ESC
+
+Para abrir, clique em **"Ver Diagrama Interativo"** apos a analise.
+
+### Conexoes entre Componentes
+
+O LLM agora mapeia quais componentes se conectam com quais em outras camadas.
+Quando a analise nao retorna conexoes explicitas, o sistema infere automaticamente
+pelo tipo de componente (api, process, store, source).
 
 ---
 
@@ -28,16 +51,17 @@ src/
   analysis/        Camada 2: analisa com LLM e gera o diagrama
     llm_client.py  Cliente LLM que funciona com OpenAI e Anthropic
     analyzer.py    Envia o contexto, recebe JSON estruturado da arquitetura
-    diagram.py     Gera o diagrama visual (PNG) e markup Mermaid
+    diagram.py     Gera o diagrama PNG, Mermaid e JSON interativo (Cytoscape.js)
 
   output/          Camada 3: gera os documentos finais
     docx_gen.py    Gera o arquivo .docx
     pdf_gen.py     Gera o PDF
+    md_gen.py      Gera o Markdown com diagrama Mermaid embutido
 
 web/
   app.py           API FastAPI (backend da interface web)
   templates/
-    index.html     Interface web
+    index.html     Interface web com diagrama interativo
 
 cli.py             CLI principal (typer + rich)
 ```
@@ -81,7 +105,7 @@ source .venv/bin/activate
 
 O VS Code vai detectar o `.venv` automaticamente e perguntar se deseja usa-lo como interpretador. Clique em **Yes**.
 
-Caso nao apareça a notificacao, pressione `Ctrl + Shift + P`, digite **Python: Select Interpreter** e escolha o `.venv`.
+Caso nao apareca a notificacao, pressione `Ctrl + Shift + P`, digite **Python: Select Interpreter** e escolha o `.venv`.
 
 ### 3. Instalar dependencias
 
@@ -174,7 +198,8 @@ http://localhost:8080
 6. Clique em **Analisar Arquitetura**
 7. Aguarde a analise (entre 30 e 60 segundos dependendo do projeto)
 8. Valide o entendimento do AI respondendo as perguntas exibidas
-9. Baixe o `.docx`, o PDF e o diagrama PNG
+9. Baixe o `.docx`, o PDF, o diagrama PNG ou o Markdown
+10. Clique em **"Ver Diagrama Interativo"** para abrir a visualizacao node-graph
 
 Para repositorios privados, use o formato com token na URL:
 
@@ -196,11 +221,12 @@ https://SEU_TOKEN@github.com/usuario/repositorio.git
 
 ## Branches
 
-| Branch       | Descricao                                      |
-|--------------|------------------------------------------------|
-| main         | Versao estavel                                 |
-| develop      | Integracao das features em desenvolvimento     |
-| feat/web-ui  | Evolucoes da interface web                     |
+| Branch                    | Descricao                                      |
+|---------------------------|------------------------------------------------|
+| main                      | Versao estavel                                 |
+| develop                   | Integracao das features em desenvolvimento     |
+| feat/web-ui               | Evolucoes da interface web                     |
+| feat/interactive-diagram  | Diagrama interativo node-graph (merged em main)|
 
 ---
 
@@ -208,12 +234,16 @@ https://SEU_TOKEN@github.com/usuario/repositorio.git
 
 Todos os arquivos ficam na pasta `output/`:
 
-| Arquivo                        | Descricao                        |
-|--------------------------------|----------------------------------|
-| `architecture.png`             | Diagrama visual em camadas       |
-| `PROJETO_architecture.docx`    | Documentacao tecnica Word        |
-| `PROJETO_architecture.pdf`     | Documentacao tecnica PDF         |
-| `PROJETO_diagram.mmd`          | Markup Mermaid para edicao       |
+| Arquivo                        | Descricao                              |
+|--------------------------------|----------------------------------------|
+| `architecture.png`             | Diagrama visual em camadas (estatico)  |
+| `PROJETO_architecture.docx`    | Documentacao tecnica Word              |
+| `PROJETO_architecture.pdf`     | Documentacao tecnica PDF               |
+| `PROJETO_diagram.mmd`          | Markup Mermaid para edicao             |
+| `PROJETO_architecture.md`      | Markdown com diagrama Mermaid embutido |
+
+O diagrama interativo e gerado em memoria e exibido diretamente no browser,
+sem necessidade de arquivo adicional.
 
 ---
 

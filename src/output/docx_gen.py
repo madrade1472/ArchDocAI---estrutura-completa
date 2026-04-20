@@ -8,31 +8,57 @@ from ..analysis.analyzer import AnalysisResult
 
 
 def _layer_rationale(layer: dict, all_layers: list, language: str) -> str:
-    """Generate a human-readable rationale sentence for a layer."""
-    name = layer["name"]
-    desc = layer.get("description", "").rstrip(".")
+    """Generate a pipeline-position note with information NOT already in the description.
+
+    Shows: what feeds into this layer, what it feeds out to, and deduplicated base
+    technology names. Never repeats the description paragraph.
+    """
+    layer_id = layer.get("id")
     comps = layer.get("components", [])
-    techs = list(dict.fromkeys(c["tech"] for c in comps if c.get("tech")))[:3]
     conn_ids = layer.get("connections_to", [])
     id_to_name = {lyr["id"]: lyr["name"] for lyr in all_layers}
-    conn_names = [id_to_name[c] for c in conn_ids if c in id_to_name]
+
+    # Layers that feed INTO this one (reverse lookup)
+    fed_by = [lyr["name"] for lyr in all_layers
+              if layer_id and layer_id in lyr.get("connections_to", [])]
+    # Layers this one feeds OUT TO
+    feeds_to = [id_to_name[c] for c in conn_ids if c in id_to_name]
+
+    # Deduplicate base tech names — splits compound strings like "Python / Selenium / BS4"
+    raw_techs = [c["tech"] for c in comps if c.get("tech")]
+    base_techs: list[str] = []
+    seen: set[str] = set()
+    for compound in raw_techs:
+        for part in compound.replace(" / ", "/").replace(", ", "/").split("/"):
+            normalized = part.strip()
+            key = normalized.lower()
+            if key and key not in seen:
+                seen.add(key)
+                base_techs.append(normalized)
+    base_techs = base_techs[:4]
 
     if language == "pt":
-        tech_str = ", ".join(techs) if techs else "as tecnologias do projeto"
-        n = len(comps)
-        comp_str = f", composta por {n} componente{'s' if n != 1 else ''}" if n else ""
-        conn_str = (f" Ela alimenta diretamente: {', '.join(conn_names)}."
-                    if conn_names else "")
-        return (f"É importante ressaltar que a camada \"{name}\" foi projetada "
-                f"de forma isolada para {desc}{comp_str}, utilizando {tech_str}.{conn_str}")
+        if fed_by and feeds_to:
+            flow = f"No pipeline, recebe dados de {', '.join(fed_by)} e entrega para {', '.join(feeds_to)}."
+        elif fed_by:
+            flow = f"Recebe dados de {', '.join(fed_by)} e representa o estágio final do pipeline."
+        elif feeds_to:
+            flow = f"É o ponto de entrada do pipeline e alimenta diretamente {', '.join(feeds_to)}."
+        else:
+            flow = "Opera de forma independente, sem dependências diretas de outras camadas."
+        tech_str = f" Tecnologias-chave: {', '.join(base_techs)}." if base_techs else ""
+        return f"↳ {flow}{tech_str}"
     else:
-        tech_str = ", ".join(techs) if techs else "the project's selected technologies"
-        n = len(comps)
-        comp_str = f", composed of {n} component{'s' if n != 1 else ''}" if n else ""
-        conn_str = (f" It feeds directly into: {', '.join(conn_names)}."
-                    if conn_names else "")
-        return (f"It is important to note that the \"{name}\" layer was designed "
-                f"in isolation to {desc}{comp_str}, using {tech_str}.{conn_str}")
+        if fed_by and feeds_to:
+            flow = f"In the pipeline, it receives data from {', '.join(fed_by)} and delivers to {', '.join(feeds_to)}."
+        elif fed_by:
+            flow = f"Receives data from {', '.join(fed_by)} — final stage of the pipeline."
+        elif feeds_to:
+            flow = f"Pipeline entry point, feeding directly into {', '.join(feeds_to)}."
+        else:
+            flow = "Operates independently, with no direct dependencies on other layers."
+        tech_str = f" Key technologies: {', '.join(base_techs)}." if base_techs else ""
+        return f"↳ {flow}{tech_str}"
 
 
 @dataclass

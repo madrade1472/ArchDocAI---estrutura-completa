@@ -25,6 +25,12 @@ class ComponentSchema(BaseModel):
     description: str = ""
     tech: str = ""
     type: Literal["source", "process", "store", "api", "ui", "infra"] = "process"
+    connections_to: list[str] = Field(default_factory=list)  # names of other components this feeds into
+
+    @field_validator("connections_to", mode="before")
+    @classmethod
+    def cap_connections(cls, v):
+        return v[:6] if isinstance(v, list) else []
 
 class LayerSchema(BaseModel):
     id: str
@@ -41,6 +47,11 @@ class LayerSchema(BaseModel):
             return "#4578a0"
         return v
 
+    @field_validator("components", mode="before")
+    @classmethod
+    def cap_components(cls, v):
+        return v[:6] if isinstance(v, list) else v
+
 class LLMResponseSchema(BaseModel):
     project_name: str = "Unknown Project"
     description: str = ""
@@ -50,11 +61,38 @@ class LLMResponseSchema(BaseModel):
     improvement_points: list[str] = Field(default_factory=list)
     validation_questions: list[str] = Field(default_factory=list)
 
+    @field_validator("tech_stack", mode="before")
+    @classmethod
+    def cap_tech_stack(cls, v):
+        return v[:8] if isinstance(v, list) else v
+
+    @field_validator("layers", mode="before")
+    @classmethod
+    def cap_layers(cls, v):
+        return v[:7] if isinstance(v, list) else v
+
+    @field_validator("good_practices", "improvement_points", mode="before")
+    @classmethod
+    def cap_lists(cls, v):
+        return v[:5] if isinstance(v, list) else v
+
+    @field_validator("validation_questions", mode="before")
+    @classmethod
+    def cap_questions(cls, v):
+        return v[:2] if isinstance(v, list) else v
+
 SYSTEM_PROMPT_PT = """Você é um arquiteto de dados e software sênior especialista em documentação técnica.
 Sua função é analisar projetos de engenharia e produzir:
 1. Uma descrição clara da arquitetura em camadas
 2. Um JSON estruturado representando as camadas e componentes (para gerar o diagrama)
 3. Pontos de atenção e boas práticas que o projeto está seguindo ou deveria seguir
+
+PRINCÍPIO DE COESÃO FUNCIONAL (regra mais importante para a estrutura):
+Agrupe componentes pelo PAPEL FUNCIONAL que cumprem no produto, não pela pasta ou arquivo onde estão.
+Tudo que faz a mesma coisa pertence ao mesmo bloco/camada — mesmo que esteja espalhado pelo código.
+Exemplos: todas as chamadas a LLM ficam juntas, todos os geradores de documento ficam juntos,
+todos os clientes de APIs externas ficam juntos, toda a persistência fica junta.
+Se você se pegar criando duas camadas que fazem coisas parecidas, FUNDA-AS em uma só.
 
 Sempre responda em JSON válido quando solicitado. Seja preciso, técnico e objetivo."""
 
@@ -64,37 +102,64 @@ Your role is to analyze engineering projects and produce:
 2. A structured JSON representing layers and components (for diagram generation)
 3. Attention points and best practices the project follows or should follow
 
+FUNCTIONAL COHESION PRINCIPLE (most important rule for structure):
+Group components by the FUNCTIONAL ROLE they play in the product, not by the folder or file they live in.
+Everything that does the same thing belongs in the same block/layer — even if it is scattered across the code.
+Examples: all LLM calls go together, all document generators go together,
+all external API clients go together, all persistence goes together.
+If you find yourself creating two layers that do similar things, MERGE them into one.
+
 Always respond with valid JSON when requested. Be precise, technical, and objective."""
 
 ANALYSIS_SCHEMA = """
-Return a JSON object with this exact structure:
+Return a JSON object with this exact structure. Respect ALL limits below — do NOT exceed them.
+
+GROUPING RULES (apply BEFORE counting layers/components):
+- Group by FUNCTIONAL ROLE, not by file path. Files in different folders that do the same job belong in the SAME component or layer.
+- A "layer" represents one functional responsibility of the product (e.g. "LLM Analysis", "Document Generation", "Data Ingestion", "Web Interface"). Never create a layer that just mirrors a folder name.
+- A "component" inside a layer represents one cohesive capability. If two pieces of code call the same external service or produce the same kind of artifact, they should be ONE component, not two.
+- All LLM calls (prompt building, API client, response parsing, retries) → one component or one layer, never split.
+- All output/document generators (PDF, DOCX, Markdown, PNG, JSON for UI) → grouped under one "Output" layer.
+- All external API integrations → grouped together (one per provider, not per call site).
+- Cross-cutting concerns (logging, config, auth) are NOT layers — mention them in description or omit.
+- Before finalizing: re-read your layers. If two layers describe similar responsibilities, MERGE them.
+
+STRICT LIMITS:
+- description: exactly 2-3 sentences, no more
+- tech_stack: 5 to 8 items max
+- layers: 3 to 7 layers (merge minor layers if needed)
+- components per layer: 3 to 6 items max (pick the most architecturally relevant)
+- good_practices: exactly 3 to 5 items
+- improvement_points: exactly 3 to 5 items
+- validation_questions: exactly 2 items
+- All text values: one sentence max, no bullet points inside strings
+- connections_to in components: use EXACT component names from OTHER layers that this component feeds data into or calls directly (max 3 per component). Leave empty [] if it truly has no downstream dependency.
+
 {
   "project_name": "string",
   "description": "2-3 sentence project summary",
-  "tech_stack": ["list of main technologies"],
+  "tech_stack": ["up to 8 main technologies"],
   "layers": [
     {
       "id": "layer_1",
       "name": "Layer display name",
-      "description": "What this layer does",
+      "description": "One sentence: what this layer does",
       "color": "#hex_color",
       "components": [
         {
           "name": "Component name",
-          "description": "What it does",
+          "description": "One sentence: what it does",
           "tech": "Technology used",
-          "type": "source|process|store|api|ui|infra"
+          "type": "source|process|store|api|ui|infra",
+          "connections_to": ["ExactNameOfComponentInAnotherLayer"]
         }
       ],
       "connections_to": ["layer_2"]
     }
   ],
-  "good_practices": ["list of good practices observed"],
-  "improvement_points": ["list of things that could be improved"],
-  "validation_questions": [
-    "Question to confirm understanding of a specific part",
-    "Question about an ambiguous architectural decision"
-  ]
+  "good_practices": ["3 to 5 items"],
+  "improvement_points": ["3 to 5 items"],
+  "validation_questions": ["exactly 2 questions"]
 }
 """
 
@@ -208,9 +273,10 @@ class ArchitectureAnalyzer:
             raise ValueError("No JSON object found")
 
         chunk = text[start:]
-        stack: list[str] = []  # tracks opening chars in order: '{' or '['
+        stack: list[str] = []
         in_string = False
         escape = False
+        after_colon = False   # True when last structural token was ':'
 
         for i, ch in enumerate(chunk):
             if escape:
@@ -220,31 +286,57 @@ class ArchitectureAnalyzer:
                 escape = True
                 continue
             if ch == '"':
-                in_string = not in_string
+                if in_string:
+                    in_string = False
+                    after_colon = False  # string value/key is done
+                else:
+                    in_string = True
                 continue
             if in_string:
                 continue
 
-            if ch == "{":
-                stack.append("{")
-            elif ch == "[":
-                stack.append("[")
+            if ch in "{[":
+                stack.append(ch)
+                after_colon = False
             elif ch == "}":
                 if stack and stack[-1] == "{":
                     stack.pop()
+                after_colon = False
                 if not stack:
-                    # Found the complete outermost object
                     return json.loads(chunk[: i + 1])
             elif ch == "]":
                 if stack and stack[-1] == "[":
                     stack.pop()
+                after_colon = False
+            elif ch == ":":
+                after_colon = True
+            elif ch == ",":
+                after_colon = False
 
-        # Truncated - close open structures in reverse order
-        suffix = '"' if in_string else ""
+        # Strip only trailing commas (never colons — they belong to the key before null)
+        tail = chunk.rstrip()
+        while tail and tail[-1] == ",":
+            tail = tail[:-1].rstrip()
+
+        suffix = ""
+        if in_string:
+            suffix += '"'           # close the open string
+            if not after_colon:
+                # The open string was a KEY (we never saw ':' after it) -> add a null value
+                suffix += ": null"
+        elif after_colon:
+            # Truncated right after ':', no value was written -> insert null
+            suffix += "null"
+
         for opener in reversed(stack):
             suffix += "}" if opener == "{" else "]"
 
-        return json.loads(chunk + suffix)
+        try:
+            return json.loads(tail + suffix)
+        except json.JSONDecodeError:
+            # Last resort: strip back to last clean value and close containers
+            closer = "".join("}" if o == "{" else "]" for o in reversed(stack))
+            return json.loads(tail + closer)
 
     def _build_result(self, data: dict) -> AnalysisResult:
         try:

@@ -319,7 +319,8 @@ class TestMermaidColors:
                  "connections_to": []},
             ])
             mermaid = gen.generate_mermaid(result)
-        assert "style l1_scanner" in mermaid
+        # ID format: {layer_id}_{index}_{slug}
+        assert "style l1_0_scanner" in mermaid
         assert "#2d6a4f99" in mermaid
 
     def test_mermaid_fallback_color_when_missing(self):

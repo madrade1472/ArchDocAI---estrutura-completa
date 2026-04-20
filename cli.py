@@ -28,6 +28,7 @@ def analyze(
     no_diagram: bool = typer.Option(False, "--no-diagram", help="Skip diagram generation"),
     no_docx: bool = typer.Option(False, "--no-docx", help="Skip .docx generation"),
     no_pdf: bool = typer.Option(False, "--no-pdf", help="Skip PDF generation"),
+    no_md: bool = typer.Option(False, "--no-md", help="Skip Markdown generation"),
     skip_validation: bool = typer.Option(False, "--yes", "-y", help="Skip interactive validation"),
 ):
     """Analyze a project and generate architecture documentation."""
@@ -36,7 +37,7 @@ def analyze(
     # ── Import layers ────────────────────────────────────────────────────────
     from src.ingestion import ProjectContext
     from src.analysis import LLMClient, ArchitectureAnalyzer, DiagramGenerator
-    from src.output import DocxGenerator, PdfGenerator
+    from src.output import DocxGenerator, PdfGenerator, MarkdownGenerator
 
     path = Path(project_path).resolve()
     if not path.is_dir():
@@ -122,6 +123,13 @@ def analyze(
             pdf_gen = PdfGenerator(output_dir=output_dir, language=language)
             pdf_path = pdf_gen.generate(result, diagram_path=diagram_path)
         console.print(f"[green]PDF saved:[/green] {pdf_path}")
+
+    if not no_md:
+        with console.status("[bold green]Generating Markdown..."):
+            md_gen = MarkdownGenerator(output_dir=output_dir, language=language)
+            md_mermaid = gen.generate_mermaid(result) if not no_diagram else None
+            md_path = md_gen.generate(result, mermaid=md_mermaid)
+        console.print(f"[green]Markdown saved:[/green] {md_path}")
 
     console.print(Panel("[bold green]Done! Documentation generated successfully.[/bold green]"))
 
