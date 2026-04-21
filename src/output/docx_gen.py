@@ -5,6 +5,9 @@ Layer 3 - Output: Generate a professional .docx technical documentation file.
 from pathlib import Path
 from dataclasses import dataclass
 from ..analysis.analyzer import AnalysisResult
+from src.logger import get_logger
+
+log = get_logger(__name__)
 
 
 def _layer_rationale(layer: dict, all_layers: list, language: str) -> str:
@@ -185,11 +188,22 @@ class DocxGenerator:
                 doc.add_picture(diagram_path, width=Inches(6.5))
                 doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
 
-            if interactive_diagram_path and Path(interactive_diagram_path).exists():
-                sub_title = "Diagrama Interativo (Node-Graph)" if self.language == "pt" else "Interactive Diagram (Node-Graph)"
-                add_subsection(sub_title)
-                doc.add_picture(interactive_diagram_path, width=Inches(6.5))
-                doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            if interactive_diagram_path:
+                p = Path(interactive_diagram_path)
+                if not p.exists():
+                    log.warning("DOCX: interactive_diagram_path provided but file missing: %s", p)
+                elif p.stat().st_size < 1024:
+                    log.warning("DOCX: interactive_diagram_path too small (%d bytes), skipping: %s", p.stat().st_size, p)
+                else:
+                    sub_title = "Diagrama Interativo (Node-Graph)" if self.language == "pt" else "Interactive Diagram (Node-Graph)"
+                    add_subsection(sub_title)
+                    try:
+                        doc.add_picture(str(p), width=Inches(6.5))
+                        doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                    except Exception as exc:
+                        log.error("DOCX: failed to embed interactive PNG at %s: %s", p, exc, exc_info=True)
+            else:
+                log.info("DOCX: no interactive_diagram_path provided - skipping interactive subsection")
 
         # ── 4. Good Practices ────────────────────────────────────────────────
         next_n = 4 if has_any_diagram else 3

@@ -106,9 +106,14 @@ def analyze(
             diagram_path = gen.generate_png(result)
         console.print(f"[green]Diagram saved:[/green] {diagram_path}")
 
-        with console.status("[bold green]Generating interactive node-graph PNG..."):
-            interactive_diagram_path = gen.generate_interactive_png(result)
-        console.print(f"[green]Interactive node-graph saved:[/green] {interactive_diagram_path}")
+        # Interactive PNG is optional - keep going without it if it fails
+        try:
+            with console.status("[bold green]Generating interactive node-graph PNG..."):
+                interactive_diagram_path = gen.generate_interactive_png(result)
+            console.print(f"[green]Interactive node-graph saved:[/green] {interactive_diagram_path}")
+        except Exception as exc:
+            console.print(f"[yellow]Warning:[/yellow] interactive node-graph failed: {exc}")
+            console.print("[yellow]Documents will be generated WITHOUT the interactive diagram.[/yellow]")
 
         mermaid = gen.generate_mermaid(result)
         mmd_path = Path(output_dir) / f"{result.project_name.replace(' ', '_')}_diagram.mmd"
