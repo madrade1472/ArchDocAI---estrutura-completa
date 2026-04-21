@@ -86,7 +86,10 @@ IMPORTANT_NAME_PATTERNS = [
 
 MAX_FILE_BYTES = 3_000    # ~750 tokens per file
 MIN_FILE_BYTES = 1        # Skip truly empty files only
-MAX_FILES = 25            # Top-25 highest-priority files
+
+# Top-N highest-priority files. Overridable via ARCHDOC_MAX_FILES env var.
+# Default 75 fits comfortably in modern LLM contexts (75 * 750 ~= 56k tokens).
+MAX_FILES = int(os.getenv("ARCHDOC_MAX_FILES", "75"))
 
 
 @dataclass
