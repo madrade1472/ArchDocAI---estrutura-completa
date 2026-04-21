@@ -52,6 +52,39 @@ class LayerSchema(BaseModel):
     def cap_components(cls, v):
         return v[:6] if isinstance(v, list) else v
 
+class QualityScoreBreakdown(BaseModel):
+    """Five dimensions, each 0-20. Total = sum (0-100)."""
+    arquitetura: int = 0       # cohesion, layer separation, scalability
+    codigo: int = 0            # patterns, structure, maintainability
+    documentacao: int = 0      # README, inline docs, ADRs
+    testabilidade: int = 0     # test presence, coverage, organization
+    devops: int = 0            # containers, CI/CD, IaC, observability
+
+    @field_validator("arquitetura", "codigo", "documentacao", "testabilidade", "devops", mode="before")
+    @classmethod
+    def clamp_dimension(cls, v):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return 0
+        return max(0, min(20, n))
+
+
+class QualityScoreSchema(BaseModel):
+    total: int = 0
+    rationale: str = ""
+    breakdown: QualityScoreBreakdown = Field(default_factory=QualityScoreBreakdown)
+
+    @field_validator("total", mode="before")
+    @classmethod
+    def clamp_total(cls, v):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return 0
+        return max(0, min(100, n))
+
+
 class LLMResponseSchema(BaseModel):
     project_name: str = "Unknown Project"
     description: str = ""
@@ -60,6 +93,7 @@ class LLMResponseSchema(BaseModel):
     good_practices: list[str] = Field(default_factory=list)
     improvement_points: list[str] = Field(default_factory=list)
     validation_questions: list[str] = Field(default_factory=list)
+    quality_score: QualityScoreSchema = Field(default_factory=QualityScoreSchema)
 
     @field_validator("tech_stack", mode="before")
     @classmethod
@@ -159,8 +193,29 @@ STRICT LIMITS:
   ],
   "good_practices": ["3 to 5 items"],
   "improvement_points": ["3 to 5 items"],
-  "validation_questions": ["exactly 2 questions"]
+  "validation_questions": ["exactly 2 questions"],
+  "quality_score": {
+    "total": 0,
+    "rationale": "1-2 sentences explaining the overall score",
+    "breakdown": {
+      "arquitetura": 0,
+      "codigo": 0,
+      "documentacao": 0,
+      "testabilidade": 0,
+      "devops": 0
+    }
+  }
 }
+
+QUALITY SCORE RULES (the project gets a 0-100 score):
+- Score 5 dimensions, each 0 to 20. The "total" field MUST equal the sum of the breakdown.
+- arquitetura (0-20): coesao, separacao de responsabilidades, modularidade, escalabilidade.
+- codigo (0-20): padroes consistentes, nomes claros, organizacao de pastas, baixo acoplamento.
+- documentacao (0-20): README presente e util, comentarios significativos, docs estruturadas.
+- testabilidade (0-20): testes existem e estao organizados, cobrem fluxos criticos.
+- devops (0-20): containerizacao, CI/CD, IaC, observabilidade, gerenciamento de configuracao.
+- Be honest and calibrated: 90-100 = projeto exemplar, 70-89 = solido com pontos de melhoria, 50-69 = funcional mas com lacunas relevantes, 30-49 = problemas estruturais, 0-29 = critico.
+- The "rationale" field must be 1-2 sentences justifying the total in plain language matching the OUTPUT_LANGUAGE.
 """
 
 
@@ -175,6 +230,12 @@ class AnalysisResult:
     improvement_points: list[str]
     validation_questions: list[str]
     user_corrections: list[str] = field(default_factory=list)
+    quality_score: dict = field(default_factory=lambda: {
+        "total": 0,
+        "rationale": "",
+        "breakdown": {"arquitetura": 0, "codigo": 0, "documentacao": 0,
+                      "testabilidade": 0, "devops": 0},
+    })
 
 
 @dataclass
@@ -343,6 +404,8 @@ class ArchitectureAnalyzer:
             validated = LLMResponseSchema.model_validate(data)
             log.info("Pydantic validation passed for LLM response")
             layers = [l.model_dump() for l in validated.layers]
+            score = validated.quality_score.model_dump()
+            score = self._reconcile_score(score)
             return AnalysisResult(
                 raw_json=data,
                 project_name=validated.project_name,
@@ -352,9 +415,11 @@ class ArchitectureAnalyzer:
                 good_practices=validated.good_practices,
                 improvement_points=validated.improvement_points,
                 validation_questions=validated.validation_questions,
+                quality_score=score,
             )
         except ValidationError as exc:
             log.warning("Pydantic validation found issues - falling back to safe defaults: %s", exc)
+            score = self._reconcile_score(data.get("quality_score") or {})
             return AnalysisResult(
                 raw_json=data,
                 project_name=data.get("project_name", "Unknown Project"),
@@ -364,4 +429,26 @@ class ArchitectureAnalyzer:
                 good_practices=data.get("good_practices", []),
                 improvement_points=data.get("improvement_points", []),
                 validation_questions=data.get("validation_questions", []),
+                quality_score=score,
             )
+
+    def _reconcile_score(self, score: dict) -> dict:
+        """Ensure total matches breakdown sum and all dimensions are clamped to 0-20.
+
+        LLMs sometimes return inconsistent totals or omit breakdown fields entirely.
+        Recompute the total from the breakdown so the displayed score is always trustworthy.
+        """
+        defaults = {"arquitetura": 0, "codigo": 0, "documentacao": 0,
+                    "testabilidade": 0, "devops": 0}
+        breakdown = {**defaults, **(score.get("breakdown") or {})}
+        for k in defaults:
+            try:
+                breakdown[k] = max(0, min(20, int(breakdown.get(k, 0))))
+            except (TypeError, ValueError):
+                breakdown[k] = 0
+        total = sum(breakdown[k] for k in defaults)
+        return {
+            "total": total,
+            "rationale": (score.get("rationale") or "").strip(),
+            "breakdown": breakdown,
+        }

@@ -321,6 +321,7 @@ def _run_analysis(
                 "good_practices": analysis.good_practices,
                 "improvement_points": analysis.improvement_points,
                 "validation_questions": analysis.validation_questions,
+                "quality_score": analysis.quality_score,
                 "mermaid": mermaid,
                 "interactive_graph": interactive_graph,
                 "files_scanned": summary["total_files"],

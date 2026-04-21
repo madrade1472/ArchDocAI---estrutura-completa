@@ -176,14 +176,59 @@ class PdfGenerator:
             else:
                 log.info("PDF: no interactive_diagram_path provided - skipping interactive subsection")
 
-        # ── 4. Good Practices ─────────────────────────────────────────────────
+        # ── Quality Score ────────────────────────────────────────────────────
         next_n = 4 if (has_static or has_interactive) else 3
+        score = result.quality_score or {}
+        if score.get("total"):
+            qs_label = f"{next_n}. Score de Qualidade Arquitetural" if self.language == "pt" else f"{next_n}. Architecture Quality Score"
+            story.append(Paragraph(qs_label, s_h1))
+
+            total = score.get("total", 0)
+            label_pt = ("Excelente" if total >= 80 else
+                        "Bom, com pontos a evoluir" if total >= 60 else
+                        "Funcional mas com lacunas relevantes" if total >= 40 else
+                        "Atencao: problemas estruturais")
+            label_en = ("Excellent" if total >= 80 else
+                        "Good, with room to improve" if total >= 60 else
+                        "Functional but with relevant gaps" if total >= 40 else
+                        "Warning: structural problems")
+            label = label_pt if self.language == "pt" else label_en
+
+            score_color = ("#10B981" if total >= 80 else
+                           "#EAB308" if total >= 60 else
+                           "#F97316" if total >= 40 else "#EF4444")
+
+            s_score = ParagraphStyle("ScoreBig", fontSize=24, textColor=colors.HexColor(score_color),
+                                      fontName="Helvetica-Bold", spaceAfter=2)
+            story.append(Paragraph(f"{total}/100", s_score))
+            s_score_label = ParagraphStyle("ScoreLabel", fontSize=12, textColor=rgb(MID_BLUE),
+                                            fontName="Helvetica-Oblique", spaceAfter=8)
+            story.append(Paragraph(label, s_score_label))
+
+            if score.get("rationale"):
+                story.append(Paragraph(score["rationale"], s_body))
+
+            breakdown = score.get("breakdown") or {}
+            dim_labels_pt = {"arquitetura": "Arquitetura", "codigo": "Codigo",
+                             "documentacao": "Documentacao", "testabilidade": "Testabilidade",
+                             "devops": "DevOps"}
+            dim_labels_en = {"arquitetura": "Architecture", "codigo": "Code",
+                             "documentacao": "Documentation", "testabilidade": "Testability",
+                             "devops": "DevOps"}
+            dim_labels = dim_labels_pt if self.language == "pt" else dim_labels_en
+            qs_items = [ListItem(Paragraph(f"{dim_labels[k]}: {int(breakdown.get(k, 0))}/20", s_bullet))
+                        for k in dim_labels]
+            story.append(ListFlowable(qs_items, bulletType="bullet"))
+            story.append(Spacer(1, 0.4 * cm))
+            next_n += 1
+
+        # ── Good Practices ───────────────────────────────────────────────────
         gp_label = f"{next_n}. Boas Práticas Identificadas" if self.language == "pt" else f"{next_n}. Good Practices"
         story.append(Paragraph(gp_label, s_h1))
         gp_items = [ListItem(Paragraph(gp, s_bullet)) for gp in result.good_practices]
         story.append(ListFlowable(gp_items, bulletType="bullet"))
 
-        # ── 5. Improvement Points ─────────────────────────────────────────────
+        # ── Improvement Points ───────────────────────────────────────────────
         next_n += 1
         ip_label = f"{next_n}. Pontos de Melhoria" if self.language == "pt" else f"{next_n}. Improvement Points"
         story.append(Paragraph(ip_label, s_h1))
