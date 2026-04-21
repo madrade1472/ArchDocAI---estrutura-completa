@@ -111,8 +111,44 @@ class MarkdownGenerator:
             lines.append("```")
             lines.append("")
 
-        # ── Good Practices ────────────────────────────────────────────────────
+        # ── Quality Score ─────────────────────────────────────────────────────
         n = 5 if mermaid else 4
+        score = result.quality_score or {}
+        if score.get("total"):
+            qs_label = f"## {n}. Score de Qualidade Arquitetural" if L == "pt" else f"## {n}. Architecture Quality Score"
+            lines.append(qs_label)
+            lines.append("")
+            total = score.get("total", 0)
+            label_pt = ("Excelente" if total >= 80 else
+                        "Bom, com pontos a evoluir" if total >= 60 else
+                        "Funcional mas com lacunas relevantes" if total >= 40 else
+                        "Atencao: problemas estruturais")
+            label_en = ("Excellent" if total >= 80 else
+                        "Good, with room to improve" if total >= 60 else
+                        "Functional but with relevant gaps" if total >= 40 else
+                        "Warning: structural problems")
+            label = label_pt if L == "pt" else label_en
+            lines.append(f"**{total}/100** - {label}")
+            lines.append("")
+            if score.get("rationale"):
+                lines.append(score["rationale"])
+                lines.append("")
+            breakdown = score.get("breakdown") or {}
+            dim_labels_pt = {"arquitetura": "Arquitetura", "codigo": "Codigo",
+                             "documentacao": "Documentacao", "testabilidade": "Testabilidade",
+                             "devops": "DevOps"}
+            dim_labels_en = {"arquitetura": "Architecture", "codigo": "Code",
+                             "documentacao": "Documentation", "testabilidade": "Testability",
+                             "devops": "DevOps"}
+            dim_labels = dim_labels_pt if L == "pt" else dim_labels_en
+            lines.append("| Dimensao | Score |" if L == "pt" else "| Dimension | Score |")
+            lines.append("|---|---|")
+            for k, name in dim_labels.items():
+                lines.append(f"| {name} | {int(breakdown.get(k, 0))}/20 |")
+            lines.append("")
+            n += 1
+
+        # ── Good Practices ────────────────────────────────────────────────────
         gp_label = f"## {n}. Boas Praticas Identificadas" if L == "pt" else f"## {n}. Good Practices Identified"
         lines.append(gp_label)
         lines.append("")
