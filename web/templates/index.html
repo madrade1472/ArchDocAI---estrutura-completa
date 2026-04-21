@@ -506,6 +506,18 @@
     </div>
     <p class="description" id="proj-desc"></p>
 
+    <div id="quality-score-block" style="display:none;margin:1.25rem 0 1.5rem;padding:1.25rem;background:linear-gradient(135deg,#0f172a,#1e293b);border:1px solid var(--border);border-radius:12px;">
+      <div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+        <div id="qs-badge" style="flex:0 0 auto;width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.85rem;font-weight:700;color:#fff;border:4px solid;">--</div>
+        <div style="flex:1 1 240px;min-width:200px;">
+          <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;">Score de Qualidade Arquitetural</div>
+          <div id="qs-label" style="font-size:1.05rem;font-weight:600;margin-top:0.15rem;color:var(--text);">--</div>
+          <div id="qs-rationale" style="font-size:0.85rem;color:var(--muted);margin-top:0.45rem;line-height:1.45;"></div>
+        </div>
+      </div>
+      <div id="qs-breakdown" style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.6rem;margin-top:1.1rem;"></div>
+    </div>
+
     <div class="section-title">Stack Tecnológico</div>
     <div class="chips" id="tech-chips"></div>
 
@@ -963,11 +975,61 @@
     };
   });
 
+  function renderQualityScore(score) {
+    const block = document.getElementById('quality-score-block');
+    if (!score || typeof score.total !== 'number' || score.total <= 0) {
+      block.style.display = 'none';
+      return;
+    }
+    const total = score.total;
+    let color, label;
+    if (total >= 80)      { color = '#10b981'; label = 'Excelente'; }
+    else if (total >= 60) { color = '#facc15'; label = 'Bom, com pontos a evoluir'; }
+    else if (total >= 40) { color = '#fb923c'; label = 'Funcional mas com lacunas relevantes'; }
+    else                  { color = '#ef4444'; label = 'Atenção: problemas estruturais'; }
+
+    const badge = document.getElementById('qs-badge');
+    badge.textContent = total;
+    badge.style.borderColor = color;
+    badge.style.background = `${color}33`;
+
+    document.getElementById('qs-label').textContent = label;
+    document.getElementById('qs-rationale').textContent = score.rationale || '';
+
+    const labels = {
+      arquitetura: 'Arquitetura',
+      codigo: 'Código',
+      documentacao: 'Documentação',
+      testabilidade: 'Testabilidade',
+      devops: 'DevOps',
+    };
+    const breakdown = score.breakdown || {};
+    document.getElementById('qs-breakdown').innerHTML = Object.keys(labels).map(k => {
+      const v = breakdown[k] || 0;
+      const pct = (v / 20) * 100;
+      const barColor = v >= 16 ? '#10b981' : v >= 12 ? '#facc15' : v >= 8 ? '#fb923c' : '#ef4444';
+      return `
+        <div style="background:#0a0e17;border:1px solid var(--border);border-radius:8px;padding:0.6rem 0.75rem;">
+          <div style="font-size:0.65rem;color:var(--muted);text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">${labels[k]}</div>
+          <div style="display:flex;align-items:baseline;gap:0.25rem;margin-top:0.2rem;">
+            <span style="font-size:1.2rem;font-weight:700;color:var(--text);">${v}</span>
+            <span style="font-size:0.7rem;color:var(--muted);">/20</span>
+          </div>
+          <div style="height:4px;background:#1e293b;border-radius:2px;margin-top:0.4rem;overflow:hidden;">
+            <div style="height:100%;width:${pct}%;background:${barColor};transition:width 400ms;"></div>
+          </div>
+        </div>`;
+    }).join('');
+    block.style.display = 'block';
+  }
+
   function renderResults(data) {
     document.getElementById('proj-name').textContent = data.project_name;
     document.getElementById('proj-meta').textContent =
       `${data.files_scanned} arquivos analisados · ${data.layers?.length ?? 0} camadas identificadas`;
     document.getElementById('proj-desc').textContent = data.description;
+
+    renderQualityScore(data.quality_score);
 
     // Tech chips
     document.getElementById('tech-chips').innerHTML =

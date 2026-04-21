@@ -205,21 +205,65 @@ class DocxGenerator:
             else:
                 log.info("DOCX: no interactive_diagram_path provided - skipping interactive subsection")
 
-        # ── 4. Good Practices ────────────────────────────────────────────────
+        # ── 4. Quality Score ─────────────────────────────────────────────────
         next_n = 4 if has_any_diagram else 3
+        score = result.quality_score or {}
+        if score.get("total"):
+            qs_title = f"{next_n}. Score de Qualidade Arquitetural" if self.language == "pt" else f"{next_n}. Architecture Quality Score"
+            add_section(qs_title)
+
+            total = score.get("total", 0)
+            label_pt = ("Excelente" if total >= 80 else
+                        "Bom, com pontos a evoluir" if total >= 60 else
+                        "Funcional mas com lacunas relevantes" if total >= 40 else
+                        "Atencao: problemas estruturais")
+            label_en = ("Excellent" if total >= 80 else
+                        "Good, with room to improve" if total >= 60 else
+                        "Functional but with relevant gaps" if total >= 40 else
+                        "Warning: structural problems")
+            label = label_pt if self.language == "pt" else label_en
+
+            score_p = doc.add_paragraph()
+            r1 = score_p.add_run(f"{total}/100 ")
+            r1.bold = True
+            r1.font.size = Pt(20)
+            r1.font.color.rgb = RGBColor(0x1D, 0x35, 0x57)
+            r2 = score_p.add_run(f"  {label}")
+            r2.italic = True
+            r2.font.size = Pt(11)
+            r2.font.color.rgb = RGBColor(0x45, 0x78, 0x9B)
+
+            if score.get("rationale"):
+                doc.add_paragraph(score["rationale"])
+
+            breakdown = score.get("breakdown") or {}
+            dim_labels_pt = {"arquitetura": "Arquitetura", "codigo": "Codigo",
+                             "documentacao": "Documentacao", "testabilidade": "Testabilidade",
+                             "devops": "DevOps"}
+            dim_labels_en = {"arquitetura": "Architecture", "codigo": "Code",
+                             "documentacao": "Documentation", "testabilidade": "Testability",
+                             "devops": "DevOps"}
+            dim_labels = dim_labels_pt if self.language == "pt" else dim_labels_en
+            for k, dim_name in dim_labels.items():
+                v = int(breakdown.get(k, 0))
+                add_bullet(f"{dim_name}: {v}/20")
+
+            next_n += 1
+
+        # ── 5. Good Practices ────────────────────────────────────────────────
         gp_title = f"{next_n}. Boas Práticas Identificadas" if self.language == "pt" else f"{next_n}. Good Practices Identified"
         add_section(gp_title)
         for gp in result.good_practices:
             add_bullet(gp)
 
-        # ── 5. Improvement Points ────────────────────────────────────────────
+        # ── Improvement Points ───────────────────────────────────────────────
         next_n += 1
         ip_title = f"{next_n}. Pontos de Melhoria" if self.language == "pt" else f"{next_n}. Improvement Points"
         add_section(ip_title)
         for ip in result.improvement_points:
             add_bullet(ip)
 
-        # ── 6. User Corrections (if any) ─────────────────────────────────────
+        # ── User Corrections (if any) ────────────────────────────────────────
         if result.user_corrections:
             next_n += 1
             uc_title = f"{next_n}. Ajustes Validados pelo Usuário" if self.language == "pt" else f"{next_n}. User-Validated Adjustments"
