@@ -682,6 +682,26 @@
             'overlay-color': '#ffffff',
           },
         },
+        // Dimmed state - applied to non-focused elements when a node is clicked
+        {
+          selector: '.dimmed',
+          style: {
+            'opacity': 0.12,
+            'text-opacity': 0.25,
+            'transition-property': 'opacity, text-opacity',
+            'transition-duration': 200,
+          },
+        },
+        // Focused node - the one that was actually clicked
+        {
+          selector: '.focused',
+          style: {
+            'border-width': 3,
+            'border-color': '#fbbf24',
+            'transition-property': 'border-width, border-color',
+            'transition-duration': 200,
+          },
+        },
       ],
       layout: {
         name: 'dagre',
@@ -732,12 +752,40 @@
       tooltip.style.display = 'none';
       e.target.removeClass('hovered');
     });
+
+    // ── Click-to-focus: highlight clicked node + direct neighbors, dim the rest
+    let _focusedId = null;
+
+    function clearFocus() {
+      _cyInstance.elements().removeClass('dimmed focused');
+      _focusedId = null;
+    }
+
+    _cyInstance.on('tap', 'node', e => {
+      const node = e.target;
+      if (_focusedId === node.id()) {
+        clearFocus();
+        return;
+      }
+      const focused = node.closedNeighborhood();
+      _cyInstance.elements().addClass('dimmed');
+      focused.removeClass('dimmed');
+      node.addClass('focused');
+      _focusedId = node.id();
+    });
+
+    _cyInstance.on('tap', e => {
+      if (e.target === _cyInstance) clearFocus();
+    });
+
+    _cyInstance._clearFocus = clearFocus;
   }
 
   function closeModal() {
     document.getElementById('cy-modal').classList.remove('open');
     document.body.style.overflow = '';
     document.getElementById('cy-tooltip').style.display = 'none';
+    _cyInstance?._clearFocus?.();
   }
 
   document.getElementById('cy-close').addEventListener('click', closeModal);
