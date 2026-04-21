@@ -281,7 +281,16 @@ def _run_analysis(
 
         diagram_gen = DiagramGenerator(output_dir=str(output_dir_run))
         diagram_path = diagram_gen.generate_png(analysis)
-        interactive_png_path = diagram_gen.generate_interactive_png(analysis)
+
+        # Interactive PNG is optional - if matplotlib/networkx fails we still
+        # ship the docx/pdf with just the static diagram instead of erroring out.
+        interactive_png_path = None
+        try:
+            interactive_png_path = diagram_gen.generate_interactive_png(analysis)
+            log.info("Interactive PNG generated: %s", interactive_png_path, extra=extra)
+        except Exception as exc:
+            log.error("Interactive PNG generation failed (continuing without it): %s", exc, exc_info=True, extra=extra)
+
         mermaid = diagram_gen.generate_mermaid(analysis)
         interactive_graph = diagram_gen.generate_interactive_json(analysis)
 
