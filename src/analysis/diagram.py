@@ -749,6 +749,18 @@ class DiagramGenerator:
         out_path.parent.mkdir(parents=True, exist_ok=True)
         plt.savefig(out_path, dpi=150, bbox_inches="tight", facecolor=BG)
         plt.close(fig)
+
+        # Validate the file was actually written and is non-trivial.
+        # matplotlib can swallow errors and produce empty/tiny PNGs that pass
+        # path.exists() but break python-docx and reportlab embedding.
+        if not out_path.exists():
+            raise RuntimeError(f"Interactive PNG was not written to {out_path}")
+        size = out_path.stat().st_size
+        if size < 1024:
+            raise RuntimeError(
+                f"Interactive PNG at {out_path} is too small ({size} bytes), "
+                "likely a silent matplotlib failure. Check fonts and Agg backend."
+            )
         return str(out_path)
 
     def generate_mermaid(self, result: AnalysisResult) -> str:

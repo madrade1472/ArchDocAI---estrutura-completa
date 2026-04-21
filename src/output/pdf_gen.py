@@ -7,6 +7,9 @@ from pathlib import Path
 from dataclasses import dataclass
 from ..analysis.analyzer import AnalysisResult
 from .docx_gen import _layer_rationale
+from src.logger import get_logger
+
+log = get_logger(__name__)
 
 
 # ── Color palette ────────────────────────────────────────────────────────────
@@ -154,12 +157,24 @@ class PdfGenerator:
                 story.append(Image(diagram_path, width=max_w, height=max_w * 0.7))
 
             if has_interactive:
-                if has_static:
-                    story.append(Spacer(1, 0.6 * cm))
-                sub_label = "Diagrama Interativo (Node-Graph)" if self.language == "pt" else "Interactive Diagram (Node-Graph)"
-                story.append(Paragraph(sub_label, s_h2))
-                story.append(Spacer(1, 0.2 * cm))
-                story.append(Image(interactive_diagram_path, width=max_w, height=max_w * 0.625))
+                p_int = Path(interactive_diagram_path)
+                size = p_int.stat().st_size
+                if size < 1024:
+                    log.warning("PDF: interactive PNG too small (%d bytes), skipping: %s", size, p_int)
+                else:
+                    if has_static:
+                        story.append(Spacer(1, 0.6 * cm))
+                    sub_label = "Diagrama Interativo (Node-Graph)" if self.language == "pt" else "Interactive Diagram (Node-Graph)"
+                    story.append(Paragraph(sub_label, s_h2))
+                    story.append(Spacer(1, 0.2 * cm))
+                    try:
+                        story.append(Image(str(p_int), width=max_w, height=max_w * 0.625))
+                    except Exception as exc:
+                        log.error("PDF: failed to embed interactive PNG at %s: %s", p_int, exc, exc_info=True)
+            elif interactive_diagram_path:
+                log.warning("PDF: interactive_diagram_path provided but file missing: %s", interactive_diagram_path)
+            else:
+                log.info("PDF: no interactive_diagram_path provided - skipping interactive subsection")
 
         # ── 4. Good Practices ─────────────────────────────────────────────────
         next_n = 4 if (has_static or has_interactive) else 3
