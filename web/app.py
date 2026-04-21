@@ -16,7 +16,10 @@ Security & reliability:
 - git_url validated to only allow https:// and git@ schemes
 """
 
+import asyncio
+import json
 import os
+import queue
 import re
 import shutil
 import subprocess
@@ -29,7 +32,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Form, HTTPException, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -77,6 +80,7 @@ def _sanitize_url(url: str) -> str:
 class JobStore:
     def __init__(self):
         self._jobs: dict[str, dict] = {}
+        self._subscribers: dict[str, list[queue.Queue]] = {}
         self._lock = threading.Lock()
 
     def create(self, job_id: str) -> None:
@@ -88,15 +92,46 @@ class JobStore:
                 "error": None,
                 "created_at": datetime.now(timezone.utc),
             }
+            self._subscribers[job_id] = []
 
     def update(self, job_id: str, **kwargs) -> None:
         with self._lock:
-            if job_id in self._jobs:
-                self._jobs[job_id].update(kwargs)
+            if job_id not in self._jobs:
+                return
+            self._jobs[job_id].update(kwargs)
+            snapshot = dict(self._jobs[job_id])
+            snapshot.pop("created_at", None)
+            subs = list(self._subscribers.get(job_id, []))
+        # Notify outside the lock to avoid blocking on slow subscribers
+        for q in subs:
+            try:
+                q.put_nowait(snapshot)
+            except queue.Full:
+                pass
 
     def get(self, job_id: str) -> dict | None:
         with self._lock:
             return dict(self._jobs[job_id]) if job_id in self._jobs else None
+
+    def subscribe(self, job_id: str) -> queue.Queue | None:
+        """Register an SSE listener. Returns a queue receiving every state snapshot.
+
+        The first snapshot is the current state so late subscribers don't miss data.
+        """
+        with self._lock:
+            if job_id not in self._jobs:
+                return None
+            q: queue.Queue = queue.Queue(maxsize=128)
+            current = dict(self._jobs[job_id])
+            current.pop("created_at", None)
+            q.put_nowait(current)
+            self._subscribers.setdefault(job_id, []).append(q)
+            return q
+
+    def unsubscribe(self, job_id: str, q: queue.Queue) -> None:
+        with self._lock:
+            if job_id in self._subscribers and q in self._subscribers[job_id]:
+                self._subscribers[job_id].remove(q)
 
     def purge_old(self, max_age_hours: int = 24) -> int:
         cutoff = datetime.now(timezone.utc) - timedelta(hours=max_age_hours)
@@ -105,6 +140,7 @@ class JobStore:
             stale = [jid for jid, j in self._jobs.items() if j["created_at"] < cutoff]
             for jid in stale:
                 del self._jobs[jid]
+                self._subscribers.pop(jid, None)
                 removed += 1
         if removed:
             log.info("Purged %d stale jobs", removed)
@@ -470,6 +506,46 @@ def create_app() -> FastAPI:
             raise HTTPException(404, "job nao encontrado")
         job.pop("created_at", None)
         return JSONResponse(job)
+
+    @app.get("/api/stream/{job_id}")
+    async def stream(job_id: str, request: Request):
+        """Server-Sent Events stream of job state changes.
+
+        Pushes a snapshot every time the job is updated, and closes the
+        connection when the job reaches a terminal state (done/error).
+        Falls back gracefully if the client disconnects.
+        """
+        sub_q = _jobs.subscribe(job_id)
+        if sub_q is None:
+            raise HTTPException(404, "job nao encontrado")
+
+        async def event_generator():
+            loop = asyncio.get_running_loop()
+            try:
+                while True:
+                    if await request.is_disconnected():
+                        break
+                    try:
+                        snapshot = await loop.run_in_executor(None, sub_q.get, True, 15)
+                    except queue.Empty:
+                        # Heartbeat keeps proxies/load balancers from killing the connection
+                        yield ": keepalive\n\n"
+                        continue
+                    yield f"data: {json.dumps(snapshot, default=str)}\n\n"
+                    if snapshot.get("status") in ("done", "error"):
+                        break
+            finally:
+                _jobs.unsubscribe(job_id, sub_q)
+
+        return StreamingResponse(
+            event_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",  # disable nginx buffering
+                "Connection": "keep-alive",
+            },
+        )
 
     @app.post("/api/estimate")
     async def estimate(

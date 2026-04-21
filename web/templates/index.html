@@ -111,6 +111,11 @@
       margin-bottom: 0.75rem;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes stepPulse {
+      0%   { transform: translateY(-3px); opacity: 0.4; color: #60a5fa; }
+      40%  { transform: translateY(0);    opacity: 1;   color: #93c5fd; }
+      100% { transform: translateY(0);    opacity: 1;   color: var(--muted); }
+    }
     #status-text { color: var(--muted); font-size: 0.9rem; margin-top: 0.25rem; }
 
     .error-box {
@@ -823,56 +828,66 @@
     document.getElementById('base_url').required = isCustom;
   });
 
-  let pollTimer = null;
+  let _activeStream = null;
+  let _lastStepText = '';
 
-  function stopPolling() {
-    if (pollTimer) { clearTimeout(pollTimer); pollTimer = null; }
-    _pollDelay = _POLL_MIN;
+  function stopStream() {
+    if (_activeStream) { _activeStream.close(); _activeStream = null; }
   }
 
-  // Polling with exponential backoff: starts at 2s, doubles each poll, caps at 15s.
-  // Reduces server load as long-running jobs progress.
-  let _pollDelay = 2000;
-  const _POLL_MIN = 2000;
-  const _POLL_MAX = 15000;
+  // Server-Sent Events: backend pushes a snapshot every time the job state
+  // changes. No polling, no exponential backoff - updates arrive instantly.
+  function pollStatus(jobId) {
+    stopStream();
+    const statusText = document.getElementById('status-text');
+    const errorBox = document.getElementById('error-box');
+    const statusBox = document.getElementById('status-box');
+    const submitBtn = document.getElementById('submit-btn');
 
-  function _scheduleNextPoll(jobId) {
-    pollTimer = setTimeout(() => pollStatus(jobId), _pollDelay);
-    _pollDelay = Math.min(_pollDelay * 1.5, _POLL_MAX);
-  }
+    const es = new EventSource(`/api/stream/${jobId}`);
+    _activeStream = es;
+    let gotAnyEvent = false;
 
-  async function pollStatus(jobId) {
-    try {
-      const res = await fetch(`/api/status/${jobId}`);
-      if (!res.ok) throw new Error('Status check failed');
-      const job = await res.json();
+    es.onmessage = (evt) => {
+      gotAnyEvent = true;
+      let job;
+      try { job = JSON.parse(evt.data); } catch { return; }
 
-      // Update step text with real message from server
-      document.getElementById('status-text').textContent = job.step || '...';
+      const newStep = job.step || '...';
+      if (newStep !== _lastStepText) {
+        statusText.textContent = newStep;
+        // Brief pulse animation so the user notices the change
+        statusText.style.animation = 'none';
+        void statusText.offsetWidth;  // force reflow to restart the animation
+        statusText.style.animation = 'stepPulse 400ms ease-out';
+        _lastStepText = newStep;
+      }
 
       if (job.status === 'done') {
-        stopPolling();
-        document.getElementById('status-box').style.display = 'none';
-        document.getElementById('submit-btn').disabled = false;
+        stopStream();
+        statusBox.style.display = 'none';
+        submitBtn.disabled = false;
         renderResults(job.result);
       } else if (job.status === 'error') {
-        stopPolling();
-        document.getElementById('status-box').style.display = 'none';
-        document.getElementById('submit-btn').disabled = false;
-        const errorBox = document.getElementById('error-box');
+        stopStream();
+        statusBox.style.display = 'none';
+        submitBtn.disabled = false;
         errorBox.textContent = 'Erro: ' + (job.error || 'Erro desconhecido');
         errorBox.style.display = 'block';
-      } else {
-        _scheduleNextPoll(jobId);
       }
-    } catch (err) {
-      stopPolling();
-      document.getElementById('status-box').style.display = 'none';
-      document.getElementById('submit-btn').disabled = false;
-      const errorBox = document.getElementById('error-box');
-      errorBox.textContent = 'Erro ao verificar status: ' + err.message;
-      errorBox.style.display = 'block';
-    }
+    };
+
+    es.onerror = () => {
+      // EventSource auto-retries by default; only surface a hard failure if
+      // we never got a single event (server might be down or job vanished).
+      if (!gotAnyEvent) {
+        stopStream();
+        statusBox.style.display = 'none';
+        submitBtn.disabled = false;
+        errorBox.textContent = 'Erro ao conectar no stream de status. Verifique se o servidor esta rodando.';
+        errorBox.style.display = 'block';
+      }
+    };
   }
 
   function startAnalysis(formData) {
@@ -896,7 +911,6 @@
           document.getElementById('quota-info').textContent =
             `Requisicoes restantes nesta hora: ${data.remaining_quota}`;
         }
-        _pollDelay = _POLL_MIN;
         pollStatus(data.job_id);
       })
       .catch(err => {
