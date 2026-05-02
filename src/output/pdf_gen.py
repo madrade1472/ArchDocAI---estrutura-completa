@@ -225,14 +225,10 @@ class PdfGenerator:
         # ── Use Cases (sequence diagrams) ────────────────────────────────────
         use_cases = getattr(result, "use_cases", None) or []
         if use_cases:
+            from .mermaid_renderer import render_mermaid_png
+            from reportlab.lib.pagesizes import A4
             uc_label = f"{next_n}. Diagramas de Sequencia" if self.language == "pt" else f"{next_n}. Sequence Diagrams"
             story.append(Paragraph(uc_label, s_h1))
-            hint = ("Diagramas em sintaxe Mermaid. Cole em mermaid.live ou viewer "
-                    "compativel para visualizacao grafica."
-                    if self.language == "pt"
-                    else "Mermaid syntax. Paste into mermaid.live or a compatible "
-                         "viewer for graphical rendering.")
-            story.append(Paragraph(f"<i>{hint}</i>", s_body))
             s_code = ParagraphStyle(
                 "MermaidCode", fontSize=9, fontName="Courier",
                 textColor=colors.HexColor("#1E40AF"),
@@ -242,16 +238,30 @@ class PdfGenerator:
                 borderColor=colors.HexColor("#CBD5E1"),
                 borderWidth=0.5, borderPadding=6,
             )
+            max_w = A4[0] - 5 * cm
             for uc in use_cases:
                 story.append(Paragraph(uc.get("name", ""), s_h2))
                 if uc.get("description"):
                     story.append(Paragraph(uc["description"], s_body))
                 diagram = (uc.get("sequence_diagram") or "").strip()
-                if diagram:
-                    # ReportLab Paragraph eats whitespace - convert each line into a separate
-                    # Paragraph so indentation and arrows survive.
+                if not diagram:
+                    continue
+                # Render via kroki.io (cached). Fall back to monospace text
+                # if the service is unreachable or rejects the diagram.
+                png_path = render_mermaid_png(diagram)
+                if png_path:
+                    try:
+                        from PIL import Image as PILImage
+                        with PILImage.open(str(png_path)) as img:
+                            ratio = img.height / img.width if img.width else 0.6
+                        img_w = min(max_w, 16 * cm)
+                        story.append(Image(str(png_path), width=img_w, height=img_w * ratio))
+                    except Exception as exc:
+                        log.warning("PDF: failed to embed kroki PNG, falling back to text: %s", exc)
+                        png_path = None
+                if not png_path:
+                    log.warning("PDF: rendering failed, embedding text for use case '%s'", uc.get("name", ""))
                     for raw_line in diagram.split("\n"):
-                        # Replace leading spaces with non-breaking spaces; escape XML chars
                         leading = len(raw_line) - len(raw_line.lstrip(" "))
                         body_text = (raw_line[leading:]
                                      .replace("&", "&amp;")
