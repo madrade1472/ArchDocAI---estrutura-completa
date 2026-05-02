@@ -250,7 +250,31 @@ class DocxGenerator:
 
             next_n += 1
 
-        # ── 5. Good Practices ────────────────────────────────────────────────
+        # ── Use Cases (sequence diagrams) ────────────────────────────────────
+        use_cases = getattr(result, "use_cases", None) or []
+        if use_cases:
+            uc_title = f"{next_n}. Diagramas de Sequencia" if self.language == "pt" else f"{next_n}. Sequence Diagrams"
+            add_section(uc_title)
+            hint = ("As diagramas abaixo estao em sintaxe Mermaid. Cole em "
+                    "mermaid.live ou em um viewer compativel para visualizacao grafica."
+                    if self.language == "pt"
+                    else "The diagrams below use Mermaid syntax. Paste into "
+                         "mermaid.live or a compatible viewer for graphical rendering.")
+            doc.add_paragraph(hint).runs[0].italic = True
+            for uc in use_cases:
+                add_subsection(uc.get("name", ""))
+                if uc.get("description"):
+                    doc.add_paragraph(uc["description"])
+                diagram = (uc.get("sequence_diagram") or "").strip()
+                if diagram:
+                    code_p = doc.add_paragraph()
+                    code_run = code_p.add_run(diagram)
+                    code_run.font.name = "Consolas"
+                    code_run.font.size = Pt(9)
+                    code_run.font.color.rgb = RGBColor(0x33, 0x66, 0x99)
+            next_n += 1
+
+        # ── Good Practices ───────────────────────────────────────────────────
         gp_title = f"{next_n}. Boas Práticas Identificadas" if self.language == "pt" else f"{next_n}. Good Practices Identified"
         add_section(gp_title)
         for gp in result.good_practices:
