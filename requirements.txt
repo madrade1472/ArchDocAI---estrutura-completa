@@ -10,6 +10,8 @@ Pillow>=10.3.0
 # Diagram rendering (Mermaid via CLI or matplotlib fallback)
 matplotlib>=3.9.0
 networkx>=3.3.0
+# cairosvg renders Devicon tech logos (SVG -> PNG) for the architecture diagram
+cairosvg>=2.7.0
 
 # Web interface
 fastapi>=0.111.0

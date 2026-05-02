@@ -158,6 +158,37 @@ def _resolve_icon_type(comp: dict) -> str:
     return _TYPE_ICON.get(comp.get("type", "").lower(), _GEAR)
 
 
+def _draw_tech_logo(ax, cx: float, cy: float, tech_text: str, r: float = 0.18) -> bool:
+    """Try to render the real Devicon logo for the given tech. Returns True on success.
+
+    Falls back silently (returns False) if no logo is mapped, the download fails,
+    or the cached file is corrupt. Caller should draw a generic icon when False.
+    """
+    if not tech_text:
+        return False
+    try:
+        from .tech_icons import get_icon_path
+        icon_path = get_icon_path(tech_text)
+        if not icon_path:
+            return False
+        from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+        import matplotlib.image as mpimg
+        img = mpimg.imread(str(icon_path))
+        # Zoom is calibrated so the logo fits roughly inside a circle of radius r.
+        # Devicon PNGs are 128px tall; we target ~2.4*r inches at the figure DPI.
+        zoom = (r * 2.4 * 72) / max(img.shape[0], 1)
+        ab = AnnotationBbox(
+            OffsetImage(img, zoom=zoom),
+            (cx, cy),
+            frameon=False, pad=0, zorder=6,
+        )
+        ax.add_artist(ab)
+        return True
+    except Exception:
+        # Never let logo rendering crash diagram generation - always degrade gracefully
+        return False
+
+
 def _draw_icon(ax, cx: float, cy: float, icon_type: str, color: str, r: float = 0.18) -> None:
     """Draw a recognisable tech icon centered at (cx, cy) with bounding radius r."""
     from matplotlib.patches import Circle, Ellipse, Polygon, FancyBboxPatch
@@ -431,11 +462,12 @@ class DiagramGenerator:
                     facecolor="white", edgecolor=accent + "77",
                     linewidth=0.9, zorder=3))
 
-                # Icon (upper portion of card)
+                # Icon (upper portion of card) - try real tech logo, fall back to drawn
                 icon_cx = card_x + card_w / 2
                 icon_cy = cy_top - icon_area_h / 2
-                _draw_icon(ax, icon_cx, icon_cy,
-                           _resolve_icon_type(comp), accent, r=icon_r)
+                if not _draw_tech_logo(ax, icon_cx, icon_cy, comp.get("tech", ""), r=icon_r):
+                    _draw_icon(ax, icon_cx, icon_cy,
+                               _resolve_icon_type(comp), accent, r=icon_r)
 
                 # Component name (below icon) — split on dash separators
                 raw_name = comp.get("name", "")
