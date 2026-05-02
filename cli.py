@@ -37,7 +37,7 @@ def analyze(
     # ── Import layers ────────────────────────────────────────────────────────
     from src.ingestion import ProjectContext
     from src.analysis import LLMClient, ArchitectureAnalyzer, DiagramGenerator
-    from src.output import DocxGenerator, PdfGenerator, MarkdownGenerator
+    from src.output import DocxGenerator, PdfGenerator, MarkdownGenerator, LLMFriendlyGenerator
 
     path = Path(project_path).resolve()
     if not path.is_dir():
@@ -142,6 +142,11 @@ def analyze(
             md_mermaid = gen.generate_mermaid(result) if not no_diagram else None
             md_path = md_gen.generate(result, mermaid=md_mermaid)
         console.print(f"[green]Markdown saved:[/green] {md_path}")
+
+    with console.status("[bold green]Generating LLM-friendly XML..."):
+        llm_gen = LLMFriendlyGenerator(output_dir=output_dir)
+        xml_path = llm_gen.generate(result, scanned_files=ctx.files)
+    console.print(f"[green]LLM-friendly XML saved:[/green] {xml_path}")
 
     console.print(Panel("[bold green]Done! Documentation generated successfully.[/bold green]"))
 

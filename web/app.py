@@ -297,7 +297,7 @@ def _run_analysis(
         from src.ingestion import ProjectContext
         from src.analysis import LLMClient, ArchitectureAnalyzer, DiagramGenerator
         from src.analysis.llm_client import LLMConfig
-        from src.output import DocxGenerator, PdfGenerator, MarkdownGenerator
+        from src.output import DocxGenerator, PdfGenerator, MarkdownGenerator, LLMFriendlyGenerator
 
         # Thread-safe: LLMConfig built locally, never touches os.environ
         config = LLMConfig(provider=provider, api_key=api_key, model=model, base_url=base_url)  # type: ignore
@@ -340,11 +340,14 @@ def _run_analysis(
         md_path = MarkdownGenerator(output_dir=str(output_dir_run), language=language).generate(
             analysis, mermaid=mermaid
         )
+        xml_path = LLMFriendlyGenerator(output_dir=str(output_dir_run)).generate(
+            analysis, scanned_files=ctx.files
+        )
 
         def rel(p: str) -> str:
             return "/" + str(Path(p).relative_to("."))
 
-        log.info("Job complete - outputs: diagram, docx, pdf, md", extra=extra)
+        log.info("Job complete - outputs: diagram, docx, pdf, md, xml", extra=extra)
         _jobs.update(
             job_id,
             status="done",
@@ -366,6 +369,7 @@ def _run_analysis(
                     "docx": rel(docx_path),
                     "pdf": rel(pdf_path),
                     "md": rel(md_path),
+                    "xml": rel(xml_path),
                 },
             },
         )
