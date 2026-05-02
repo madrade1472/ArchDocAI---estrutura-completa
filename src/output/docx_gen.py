@@ -253,20 +253,24 @@ class DocxGenerator:
         # ── Use Cases (sequence diagrams) ────────────────────────────────────
         use_cases = getattr(result, "use_cases", None) or []
         if use_cases:
+            from .mermaid_renderer import render_mermaid_png
             uc_title = f"{next_n}. Diagramas de Sequencia" if self.language == "pt" else f"{next_n}. Sequence Diagrams"
             add_section(uc_title)
-            hint = ("As diagramas abaixo estao em sintaxe Mermaid. Cole em "
-                    "mermaid.live ou em um viewer compativel para visualizacao grafica."
-                    if self.language == "pt"
-                    else "The diagrams below use Mermaid syntax. Paste into "
-                         "mermaid.live or a compatible viewer for graphical rendering.")
-            doc.add_paragraph(hint).runs[0].italic = True
             for uc in use_cases:
                 add_subsection(uc.get("name", ""))
                 if uc.get("description"):
                     doc.add_paragraph(uc["description"])
                 diagram = (uc.get("sequence_diagram") or "").strip()
-                if diagram:
+                if not diagram:
+                    continue
+                # Render via kroki.io (cached). Fall back to monospace text
+                # if the service is unreachable or rejects the diagram.
+                png_path = render_mermaid_png(diagram)
+                if png_path:
+                    doc.add_picture(str(png_path), width=Inches(6.0))
+                    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                else:
+                    log.warning("DOCX: rendering failed, embedding text for use case '%s'", uc.get("name", ""))
                     code_p = doc.add_paragraph()
                     code_run = code_p.add_run(diagram)
                     code_run.font.name = "Consolas"
