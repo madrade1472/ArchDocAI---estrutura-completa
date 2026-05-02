@@ -529,6 +529,11 @@
     <div class="section-title">Camadas da Arquitetura</div>
     <ul class="layer-list" id="layer-list"></ul>
 
+    <div id="use-cases-block" style="display:none;margin:1.25rem 0;">
+      <div class="section-title">Diagramas de Sequência (Use Cases)</div>
+      <div id="use-cases-list"></div>
+    </div>
+
     <div id="diagram-preview">
       <div class="section-title">Diagrama</div>
     </div>
@@ -584,6 +589,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.28.1/cytoscape.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/cytoscape-dagre@2.5.0/cytoscape-dagre.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<script>
+  if (window.mermaid) {
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: "dark",
+      sequence: { actorMargin: 50, messageFontSize: 13, noteMargin: 8 },
+      themeVariables: { darkMode: true, background: "#0d1117", primaryColor: "#1d3557" },
+    });
+  }
+</script>
 
 <script>
   // ── Cytoscape setup ────────────────────────────────────────────────
@@ -1037,6 +1053,38 @@
     block.style.display = 'block';
   }
 
+  function _escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+    })[c]);
+  }
+
+  async function renderUseCases(useCases) {
+    const block = document.getElementById('use-cases-block');
+    const list = document.getElementById('use-cases-list');
+    if (!useCases || !useCases.length || !window.mermaid) {
+      block.style.display = 'none';
+      return;
+    }
+    block.style.display = 'block';
+    list.innerHTML = useCases.map((uc, i) => `
+      <details ${i === 0 ? 'open' : ''} style="background:#0d1117;border:1px solid var(--border);border-radius:8px;padding:0.85rem 1rem;margin-bottom:0.6rem;">
+        <summary style="cursor:pointer;font-weight:600;color:var(--text);font-size:0.95rem;">
+          ${_escapeHtml(uc.name || `Use case ${i+1}`)}
+        </summary>
+        ${uc.description ? `<p style="color:var(--muted);font-size:0.85rem;margin:0.5rem 0 0.75rem;line-height:1.5;">${_escapeHtml(uc.description)}</p>` : ''}
+        <div class="mermaid-container" style="background:#0a0e17;border-radius:6px;padding:0.75rem;overflow-x:auto;">
+          <div class="mermaid">${_escapeHtml(uc.sequence_diagram)}</div>
+        </div>
+      </details>
+    `).join('');
+    try {
+      await mermaid.run({ querySelector: '#use-cases-list .mermaid' });
+    } catch (e) {
+      console.warn('Mermaid render failed:', e);
+    }
+  }
+
   function renderResults(data) {
     document.getElementById('proj-name').textContent = data.project_name;
     document.getElementById('proj-meta').textContent =
@@ -1044,6 +1092,7 @@
     document.getElementById('proj-desc').textContent = data.description;
 
     renderQualityScore(data.quality_score);
+    renderUseCases(data.use_cases);
 
     // Tech chips
     document.getElementById('tech-chips').innerHTML =

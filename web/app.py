@@ -358,6 +358,7 @@ def _run_analysis(
                 "improvement_points": analysis.improvement_points,
                 "validation_questions": analysis.validation_questions,
                 "quality_score": analysis.quality_score,
+                "use_cases": analysis.use_cases,
                 "mermaid": mermaid,
                 "interactive_graph": interactive_graph,
                 "files_scanned": summary["total_files"],

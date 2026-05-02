@@ -85,6 +85,28 @@ class QualityScoreSchema(BaseModel):
         return max(0, min(100, n))
 
 
+class UseCaseSchema(BaseModel):
+    """A single use case with a Mermaid sequenceDiagram describing its flow."""
+    name: str
+    description: str = ""
+    sequence_diagram: str = ""
+
+    @field_validator("sequence_diagram", mode="before")
+    @classmethod
+    def normalize_diagram(cls, v):
+        if not isinstance(v, str):
+            return ""
+        cleaned = v.strip()
+        # Strip markdown code fences if the LLM wrapped the diagram in ```mermaid ... ```
+        if cleaned.startswith("```"):
+            lines = cleaned.split("\n")
+            inner = lines[1:]
+            if inner and inner[-1].strip() == "```":
+                inner = inner[:-1]
+            cleaned = "\n".join(inner).strip()
+        return cleaned
+
+
 class LLMResponseSchema(BaseModel):
     project_name: str = "Unknown Project"
     description: str = ""
@@ -94,6 +116,13 @@ class LLMResponseSchema(BaseModel):
     improvement_points: list[str] = Field(default_factory=list)
     validation_questions: list[str] = Field(default_factory=list)
     quality_score: QualityScoreSchema = Field(default_factory=QualityScoreSchema)
+    use_cases: list[UseCaseSchema] = Field(default_factory=list)
+
+    @field_validator("use_cases", mode="before")
+    @classmethod
+    def cap_use_cases(cls, v):
+        # Cap at 5 to keep token budget under control and rendering legible
+        return v[:5] if isinstance(v, list) else []
 
     @field_validator("tech_stack", mode="before")
     @classmethod
@@ -204,8 +233,24 @@ STRICT LIMITS:
       "testabilidade": 0,
       "devops": 0
     }
-  }
+  },
+  "use_cases": [
+    {
+      "name": "Use case display name",
+      "description": "1-2 sentence summary of what this use case does",
+      "sequence_diagram": "sequenceDiagram\n    actor User\n    User->>API: POST /endpoint\n    API->>DB: query\n    DB-->>API: result\n    API-->>User: 200 OK"
+    }
+  ]
 }
+
+USE CASES RULES (sequence diagrams):
+- Identify the 3 to 5 MOST IMPORTANT user-facing or system-facing flows in the project. Examples of good entry points: HTTP routes, CLI commands, scheduled jobs, message handlers.
+- For each use case, write a Mermaid sequenceDiagram showing the actual flow between the components you identified in the layers above.
+- Use the EXACT component names from the architecture above as participants/actors. Never invent components.
+- Keep each diagram between 4 and 10 messages. Concise diagrams are far more useful than exhaustive ones.
+- Start every diagram with the literal line "sequenceDiagram" (no markdown fences, no leading whitespace before that line).
+- Prefer arrow types: ->> for synchronous calls, -->> for responses, -) for async messages.
+- If the project has fewer than 3 clear use cases, return only the ones you can justify. An empty list is acceptable for tiny libraries with no flows.
 
 QUALITY SCORE RULES (the project gets a 0-100 score):
 - Score 5 dimensions, each 0 to 20. The "total" field MUST equal the sum of the breakdown.
@@ -236,6 +281,7 @@ class AnalysisResult:
         "breakdown": {"arquitetura": 0, "codigo": 0, "documentacao": 0,
                       "testabilidade": 0, "devops": 0},
     })
+    use_cases: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -406,6 +452,7 @@ class ArchitectureAnalyzer:
             layers = [l.model_dump() for l in validated.layers]
             score = validated.quality_score.model_dump()
             score = self._reconcile_score(score)
+            use_cases = [uc.model_dump() for uc in validated.use_cases if uc.sequence_diagram.strip()]
             return AnalysisResult(
                 raw_json=data,
                 project_name=validated.project_name,
@@ -416,10 +463,13 @@ class ArchitectureAnalyzer:
                 improvement_points=validated.improvement_points,
                 validation_questions=validated.validation_questions,
                 quality_score=score,
+                use_cases=use_cases,
             )
         except ValidationError as exc:
             log.warning("Pydantic validation found issues - falling back to safe defaults: %s", exc)
             score = self._reconcile_score(data.get("quality_score") or {})
+            raw_use_cases = data.get("use_cases") or []
+            use_cases = [uc for uc in raw_use_cases if isinstance(uc, dict) and uc.get("sequence_diagram")]
             return AnalysisResult(
                 raw_json=data,
                 project_name=data.get("project_name", "Unknown Project"),
@@ -430,6 +480,7 @@ class ArchitectureAnalyzer:
                 improvement_points=data.get("improvement_points", []),
                 validation_questions=data.get("validation_questions", []),
                 quality_score=score,
+                use_cases=use_cases,
             )
 
     def _reconcile_score(self, score: dict) -> dict:
