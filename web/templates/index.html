@@ -179,6 +179,7 @@
     .download-links a.pdf { background: #6a2d7a; }
     .download-links a.png { background: var(--green); }
     .download-links a.md  { background: #1a5276; }
+    .download-links a.xml { background: #7c2d12; }
 
     /* ── Hero ───────────────────────────────────────────── */
     .hero {
@@ -1098,6 +1099,7 @@
     if (data.files?.pdf)     dl.innerHTML += `<a href="${data.files.pdf}" download class="pdf">⬇ Baixar PDF</a>`;
     if (data.files?.diagram) dl.innerHTML += `<a href="${data.files.diagram}" download class="png">⬇ Diagrama PNG</a>`;
     if (data.files?.md)      dl.innerHTML += `<a href="${data.files.md}" download class="md">⬇ Baixar .md</a>`;
+    if (data.files?.xml)     dl.innerHTML += `<a href="${data.files.xml}" download class="xml" title="Knowledge file otimizado para alimentar outros LLMs/agentes">⬇ XML (LLM-friendly)</a>`;
 
     document.getElementById('results').style.display = 'block';
     document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
