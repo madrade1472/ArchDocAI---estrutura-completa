@@ -297,7 +297,7 @@ def _run_analysis(
         from src.ingestion import ProjectContext
         from src.analysis import LLMClient, ArchitectureAnalyzer, DiagramGenerator
         from src.analysis.llm_client import LLMConfig
-        from src.output import DocxGenerator, PdfGenerator, MarkdownGenerator
+        from src.output import DocxGenerator, PdfGenerator, MarkdownGenerator, LLMFriendlyGenerator
 
         # Thread-safe: LLMConfig built locally, never touches os.environ
         config = LLMConfig(provider=provider, api_key=api_key, model=model, base_url=base_url)  # type: ignore
@@ -340,11 +340,14 @@ def _run_analysis(
         md_path = MarkdownGenerator(output_dir=str(output_dir_run), language=language).generate(
             analysis, mermaid=mermaid
         )
+        xml_path = LLMFriendlyGenerator(output_dir=str(output_dir_run)).generate(
+            analysis, scanned_files=ctx.files
+        )
 
         def rel(p: str) -> str:
             return "/" + str(Path(p).relative_to("."))
 
-        log.info("Job complete - outputs: diagram, docx, pdf, md", extra=extra)
+        log.info("Job complete - outputs: diagram, docx, pdf, md, xml", extra=extra)
         _jobs.update(
             job_id,
             status="done",
@@ -358,6 +361,7 @@ def _run_analysis(
                 "improvement_points": analysis.improvement_points,
                 "validation_questions": analysis.validation_questions,
                 "quality_score": analysis.quality_score,
+                "use_cases": analysis.use_cases,
                 "mermaid": mermaid,
                 "interactive_graph": interactive_graph,
                 "files_scanned": summary["total_files"],
@@ -366,6 +370,7 @@ def _run_analysis(
                     "docx": rel(docx_path),
                     "pdf": rel(pdf_path),
                     "md": rel(md_path),
+                    "xml": rel(xml_path),
                 },
             },
         )
@@ -654,6 +659,51 @@ def create_app() -> FastAPI:
             })
         finally:
             shutil.rmtree(tmp_dir, ignore_errors=True)
+
+    @app.get("/feedback-evolucao", response_class=HTMLResponse)
+    async def feedback_evolucao_page():
+        """Render docs/feedback-evolucao.md as styled HTML for in-browser preview."""
+        md_path = Path("docs/feedback-evolucao.md")
+        if not md_path.exists():
+            raise HTTPException(404, "Documento nao encontrado")
+        md_content = md_path.read_text()
+        # Escape backticks and backslashes so they survive embedding in JS template literal
+        safe_md = md_content.replace("\\", "\\\\").replace("`", "\\`")
+        return HTMLResponse(content=f"""<!doctype html>
+<html lang="pt-BR"><head><meta charset="utf-8">
+<title>Feedback e proposta de evolucao - ArchDocAI</title>
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<style>
+  body {{ background:#0a0e17; color:#e6edf3; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+         max-width:880px; margin:0 auto; padding:2.5rem 2rem; line-height:1.65; }}
+  h1 {{ color:#60a5fa; border-bottom:2px solid #1e293b; padding-bottom:0.5rem; }}
+  h2 {{ color:#93c5fd; margin-top:2.5rem; border-bottom:1px solid #1e293b; padding-bottom:0.3rem; }}
+  h3 {{ color:#cbd5e1; margin-top:1.5rem; }}
+  h4 {{ color:#94a3b8; margin-top:1.2rem; }}
+  hr {{ border:none; border-top:1px solid #1e293b; margin:2rem 0; }}
+  code {{ background:#1e293b; padding:0.15rem 0.4rem; border-radius:4px;
+         font-family:Consolas,Monaco,monospace; font-size:0.9em; color:#fbbf24; }}
+  table {{ border-collapse:collapse; width:100%; margin:1rem 0; }}
+  th, td {{ border:1px solid #1e293b; padding:0.6rem 0.85rem; text-align:left; }}
+  th {{ background:#1e293b; color:#93c5fd; }}
+  tr:nth-child(even) {{ background:#0f172a; }}
+  strong {{ color:#facc15; }}
+  ul, ol {{ padding-left:1.5rem; }}
+  li {{ margin-bottom:0.35rem; }}
+  blockquote {{ border-left:3px solid #60a5fa; padding-left:1rem; color:#94a3b8;
+                margin:1rem 0; }}
+  .nav {{ position:fixed; top:1rem; right:1rem; background:#1e293b; padding:0.5rem 1rem;
+          border-radius:6px; font-size:0.8rem; }}
+  .nav a {{ color:#60a5fa; text-decoration:none; }}
+</style></head>
+<body>
+<div class="nav"><a href="/">&larr; Voltar para o app</a></div>
+<div id="content"></div>
+<script>
+  const md = `{safe_md}`;
+  document.getElementById('content').innerHTML = marked.parse(md);
+</script>
+</body></html>""")
 
     @app.get("/api/quota")
     async def quota(request: Request):

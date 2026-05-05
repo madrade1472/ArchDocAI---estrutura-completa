@@ -222,6 +222,46 @@ class PdfGenerator:
             story.append(Spacer(1, 0.4 * cm))
             next_n += 1
 
+        # ── Use Cases (sequence diagrams) ────────────────────────────────────
+        use_cases = getattr(result, "use_cases", None) or []
+        if use_cases:
+            uc_label = f"{next_n}. Diagramas de Sequencia" if self.language == "pt" else f"{next_n}. Sequence Diagrams"
+            story.append(Paragraph(uc_label, s_h1))
+            hint = ("Diagramas em sintaxe Mermaid. Cole em mermaid.live ou viewer "
+                    "compativel para visualizacao grafica."
+                    if self.language == "pt"
+                    else "Mermaid syntax. Paste into mermaid.live or a compatible "
+                         "viewer for graphical rendering.")
+            story.append(Paragraph(f"<i>{hint}</i>", s_body))
+            s_code = ParagraphStyle(
+                "MermaidCode", fontSize=9, fontName="Courier",
+                textColor=colors.HexColor("#1E40AF"),
+                leftIndent=12, rightIndent=12, leading=12,
+                spaceBefore=4, spaceAfter=8,
+                backColor=colors.HexColor("#F1F5F9"),
+                borderColor=colors.HexColor("#CBD5E1"),
+                borderWidth=0.5, borderPadding=6,
+            )
+            for uc in use_cases:
+                story.append(Paragraph(uc.get("name", ""), s_h2))
+                if uc.get("description"):
+                    story.append(Paragraph(uc["description"], s_body))
+                diagram = (uc.get("sequence_diagram") or "").strip()
+                if diagram:
+                    # ReportLab Paragraph eats whitespace - convert each line into a separate
+                    # Paragraph so indentation and arrows survive.
+                    for raw_line in diagram.split("\n"):
+                        # Replace leading spaces with non-breaking spaces; escape XML chars
+                        leading = len(raw_line) - len(raw_line.lstrip(" "))
+                        body_text = (raw_line[leading:]
+                                     .replace("&", "&amp;")
+                                     .replace("<", "&lt;")
+                                     .replace(">", "&gt;"))
+                        line_html = ("&nbsp;" * leading) + (body_text or "&nbsp;")
+                        story.append(Paragraph(line_html, s_code))
+                story.append(Spacer(1, 0.3 * cm))
+            next_n += 1
+
         # ── Good Practices ───────────────────────────────────────────────────
         gp_label = f"{next_n}. Boas Práticas Identificadas" if self.language == "pt" else f"{next_n}. Good Practices"
         story.append(Paragraph(gp_label, s_h1))

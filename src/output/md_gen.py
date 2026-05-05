@@ -148,6 +148,26 @@ class MarkdownGenerator:
             lines.append("")
             n += 1
 
+        # ── Use Cases (sequence diagrams) ─────────────────────────────────────
+        use_cases = getattr(result, "use_cases", None) or []
+        if use_cases:
+            uc_label = f"## {n}. Diagramas de Sequencia" if L == "pt" else f"## {n}. Sequence Diagrams"
+            lines.append(uc_label)
+            lines.append("")
+            for uc in use_cases:
+                lines.append(f"### {uc.get('name', '')}")
+                lines.append("")
+                if uc.get("description"):
+                    lines.append(uc["description"])
+                    lines.append("")
+                diagram = (uc.get("sequence_diagram") or "").strip()
+                if diagram:
+                    lines.append("```mermaid")
+                    lines.append(diagram)
+                    lines.append("```")
+                    lines.append("")
+            n += 1
+
         # ── Good Practices ────────────────────────────────────────────────────
         gp_label = f"## {n}. Boas Praticas Identificadas" if L == "pt" else f"## {n}. Good Practices Identified"
         lines.append(gp_label)
