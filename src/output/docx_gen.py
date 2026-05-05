@@ -253,25 +253,78 @@ class DocxGenerator:
         # ── Use Cases (sequence diagrams) ────────────────────────────────────
         use_cases = getattr(result, "use_cases", None) or []
         if use_cases:
+            from .mermaid_renderer import render_mermaid_png
             uc_title = f"{next_n}. Diagramas de Sequencia" if self.language == "pt" else f"{next_n}. Sequence Diagrams"
             add_section(uc_title)
-            hint = ("As diagramas abaixo estao em sintaxe Mermaid. Cole em "
-                    "mermaid.live ou em um viewer compativel para visualizacao grafica."
-                    if self.language == "pt"
-                    else "The diagrams below use Mermaid syntax. Paste into "
-                         "mermaid.live or a compatible viewer for graphical rendering.")
-            doc.add_paragraph(hint).runs[0].italic = True
             for uc in use_cases:
                 add_subsection(uc.get("name", ""))
                 if uc.get("description"):
                     doc.add_paragraph(uc["description"])
                 diagram = (uc.get("sequence_diagram") or "").strip()
-                if diagram:
+                if not diagram:
+                    continue
+                # Render via kroki.io (cached). Fall back to monospace text
+                # if the service is unreachable or rejects the diagram.
+                png_path = render_mermaid_png(diagram)
+                if png_path:
+                    doc.add_picture(str(png_path), width=Inches(6.0))
+                    doc.paragraphs[-1].alignment = WD_ALIGN_PARAGRAPH.CENTER
+                else:
+                    log.warning("DOCX: rendering failed, embedding text for use case '%s'", uc.get("name", ""))
                     code_p = doc.add_paragraph()
                     code_run = code_p.add_run(diagram)
                     code_run.font.name = "Consolas"
                     code_run.font.size = Pt(9)
                     code_run.font.color.rgb = RGBColor(0x33, 0x66, 0x99)
+            next_n += 1
+
+        # ── Architecture Decision Records (ADRs) ─────────────────────────────
+        adrs = getattr(result, "adrs", None) or []
+        if adrs:
+            adr_title = (f"{next_n}. Decisoes Arquiteturais (ADRs)"
+                         if self.language == "pt"
+                         else f"{next_n}. Architecture Decision Records (ADRs)")
+            add_section(adr_title)
+            intro = (
+                "Decisoes arquiteturais identificadas no projeto. Cada ADR descreve o contexto, "
+                "a decisao tomada e suas consequencias — formato MADR."
+                if self.language == "pt" else
+                "Architectural decisions identified in the project. Each ADR describes the "
+                "context, the decision and its consequences — MADR format."
+            )
+            doc.add_paragraph(intro)
+
+            for i, adr in enumerate(adrs, start=1):
+                num = f"{i:04d}"
+                title = (adr.get("title") or "Untitled").strip()
+                status = (adr.get("status") or "accepted").capitalize()
+                add_subsection(f"ADR-{num}: {title}")
+
+                status_p = doc.add_paragraph()
+                status_label = "Status:" if self.language == "pt" else "Status:"
+                run_lbl = status_p.add_run(status_label + " ")
+                run_lbl.bold = True
+                run_lbl.font.size = Pt(11)
+                status_p.add_run(status).font.size = Pt(11)
+
+                def _adr_field(label: str, value: str):
+                    if not value:
+                        return
+                    p = doc.add_paragraph()
+                    r = p.add_run(label + " ")
+                    r.bold = True
+                    r.font.size = Pt(11)
+                    p.add_run(value).font.size = Pt(11)
+
+                ctx_lbl = "Contexto:" if self.language == "pt" else "Context:"
+                dec_lbl = "Decisao:" if self.language == "pt" else "Decision:"
+                cons_lbl = "Consequencias:" if self.language == "pt" else "Consequences:"
+                alt_lbl = "Alternativas:" if self.language == "pt" else "Alternatives:"
+                _adr_field(ctx_lbl, (adr.get("context") or "").strip())
+                _adr_field(dec_lbl, (adr.get("decision") or "").strip())
+                _adr_field(cons_lbl, (adr.get("consequences") or "").strip())
+                _adr_field(alt_lbl, (adr.get("alternatives") or "").strip())
+
             next_n += 1
 
         # ── Good Practices ───────────────────────────────────────────────────

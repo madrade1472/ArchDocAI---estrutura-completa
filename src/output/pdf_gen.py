@@ -225,14 +225,10 @@ class PdfGenerator:
         # ── Use Cases (sequence diagrams) ────────────────────────────────────
         use_cases = getattr(result, "use_cases", None) or []
         if use_cases:
+            from .mermaid_renderer import render_mermaid_png
+            from reportlab.lib.pagesizes import A4
             uc_label = f"{next_n}. Diagramas de Sequencia" if self.language == "pt" else f"{next_n}. Sequence Diagrams"
             story.append(Paragraph(uc_label, s_h1))
-            hint = ("Diagramas em sintaxe Mermaid. Cole em mermaid.live ou viewer "
-                    "compativel para visualizacao grafica."
-                    if self.language == "pt"
-                    else "Mermaid syntax. Paste into mermaid.live or a compatible "
-                         "viewer for graphical rendering.")
-            story.append(Paragraph(f"<i>{hint}</i>", s_body))
             s_code = ParagraphStyle(
                 "MermaidCode", fontSize=9, fontName="Courier",
                 textColor=colors.HexColor("#1E40AF"),
@@ -242,16 +238,30 @@ class PdfGenerator:
                 borderColor=colors.HexColor("#CBD5E1"),
                 borderWidth=0.5, borderPadding=6,
             )
+            max_w = A4[0] - 5 * cm
             for uc in use_cases:
                 story.append(Paragraph(uc.get("name", ""), s_h2))
                 if uc.get("description"):
                     story.append(Paragraph(uc["description"], s_body))
                 diagram = (uc.get("sequence_diagram") or "").strip()
-                if diagram:
-                    # ReportLab Paragraph eats whitespace - convert each line into a separate
-                    # Paragraph so indentation and arrows survive.
+                if not diagram:
+                    continue
+                # Render via kroki.io (cached). Fall back to monospace text
+                # if the service is unreachable or rejects the diagram.
+                png_path = render_mermaid_png(diagram)
+                if png_path:
+                    try:
+                        from PIL import Image as PILImage
+                        with PILImage.open(str(png_path)) as img:
+                            ratio = img.height / img.width if img.width else 0.6
+                        img_w = min(max_w, 16 * cm)
+                        story.append(Image(str(png_path), width=img_w, height=img_w * ratio))
+                    except Exception as exc:
+                        log.warning("PDF: failed to embed kroki PNG, falling back to text: %s", exc)
+                        png_path = None
+                if not png_path:
+                    log.warning("PDF: rendering failed, embedding text for use case '%s'", uc.get("name", ""))
                     for raw_line in diagram.split("\n"):
-                        # Replace leading spaces with non-breaking spaces; escape XML chars
                         leading = len(raw_line) - len(raw_line.lstrip(" "))
                         body_text = (raw_line[leading:]
                                      .replace("&", "&amp;")
@@ -260,6 +270,47 @@ class PdfGenerator:
                         line_html = ("&nbsp;" * leading) + (body_text or "&nbsp;")
                         story.append(Paragraph(line_html, s_code))
                 story.append(Spacer(1, 0.3 * cm))
+            next_n += 1
+
+        # ── Architecture Decision Records (ADRs) ─────────────────────────────
+        adrs = getattr(result, "adrs", None) or []
+        if adrs:
+            adr_label = (f"{next_n}. Decisoes Arquiteturais (ADRs)"
+                         if self.language == "pt"
+                         else f"{next_n}. Architecture Decision Records (ADRs)")
+            story.append(Paragraph(adr_label, s_h1))
+            intro = (
+                "Decisoes arquiteturais identificadas no projeto. Cada ADR descreve o "
+                "contexto, a decisao tomada e suas consequencias - formato MADR."
+                if self.language == "pt" else
+                "Architectural decisions identified in the project. Each ADR describes the "
+                "context, the decision and its consequences - MADR format."
+            )
+            story.append(Paragraph(intro, s_body))
+
+            ctx_lbl = "Contexto:" if self.language == "pt" else "Context:"
+            dec_lbl = "Decisao:" if self.language == "pt" else "Decision:"
+            cons_lbl = "Consequencias:" if self.language == "pt" else "Consequences:"
+            alt_lbl = "Alternativas:" if self.language == "pt" else "Alternatives:"
+            status_lbl = "Status:"
+
+            for i, adr in enumerate(adrs, start=1):
+                num = f"{i:04d}"
+                title = (adr.get("title") or "Untitled").strip()
+                status = (adr.get("status") or "accepted").capitalize()
+                story.append(Paragraph(f"ADR-{num}: {title}", s_h2))
+                story.append(Paragraph(f"<b>{status_lbl}</b> {status}", s_body))
+
+                def _line(label: str, value: str):
+                    value = (value or "").strip()
+                    if value:
+                        story.append(Paragraph(f"<b>{label}</b> {value}", s_body))
+
+                _line(ctx_lbl, adr.get("context", ""))
+                _line(dec_lbl, adr.get("decision", ""))
+                _line(cons_lbl, adr.get("consequences", ""))
+                _line(alt_lbl, adr.get("alternatives", ""))
+                story.append(Spacer(1, 0.25 * cm))
             next_n += 1
 
         # ── Good Practices ───────────────────────────────────────────────────

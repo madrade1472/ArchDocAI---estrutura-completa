@@ -535,6 +535,15 @@
       <div id="use-cases-list"></div>
     </div>
 
+    <div id="adrs-block" style="display:none;margin:1.25rem 0;">
+      <div class="section-title">Decisões Arquiteturais (ADRs)</div>
+      <p style="color:var(--muted);font-size:0.85rem;margin:0 0 0.75rem;line-height:1.5;">
+        Decisões inferidas do código no formato MADR — cada uma vira um arquivo
+        <code style="color:#aac4e0;">0001-*.md</code> em <code style="color:#aac4e0;">&lt;projeto&gt;_adr/</code>.
+      </p>
+      <div id="adrs-list"></div>
+    </div>
+
     <div id="diagram-preview">
       <div class="section-title">Diagrama</div>
     </div>
@@ -1060,6 +1069,48 @@
     })[c]);
   }
 
+  function renderADRs(adrs) {
+    const block = document.getElementById('adrs-block');
+    const list  = document.getElementById('adrs-list');
+    if (!adrs || !adrs.length) { block.style.display = 'none'; return; }
+    block.style.display = 'block';
+
+    const statusColor = {
+      accepted:    '#10b981',
+      proposed:    '#eab308',
+      deprecated:  '#94a3b8',
+      superseded:  '#94a3b8',
+    };
+
+    list.innerHTML = adrs.map((adr, i) => {
+      const num = String(i + 1).padStart(4, '0');
+      const status = (adr.status || 'accepted').toLowerCase();
+      const color  = statusColor[status] || '#4578a0';
+      const fields = [];
+      if (adr.context)      fields.push(['Contexto', adr.context]);
+      if (adr.decision)     fields.push(['Decisão', adr.decision]);
+      if (adr.consequences) fields.push(['Consequências', adr.consequences]);
+      if (adr.alternatives) fields.push(['Alternativas', adr.alternatives]);
+      const fieldsHtml = fields.map(([k, v]) =>
+        `<div style="margin-top:0.55rem;font-size:0.85rem;line-height:1.5;">
+           <span style="color:${color};font-weight:600;">${k}:</span>
+           <span style="color:var(--text);"> ${_escapeHtml(v)}</span>
+         </div>`
+      ).join('');
+
+      return `
+        <details ${i === 0 ? 'open' : ''} style="background:#0d1117;border:1px solid var(--border);border-left:3px solid ${color};border-radius:8px;padding:0.85rem 1rem;margin-bottom:0.6rem;">
+          <summary style="cursor:pointer;font-weight:600;color:var(--text);font-size:0.95rem;display:flex;align-items:center;gap:0.6rem;flex-wrap:wrap;">
+            <span style="font-family:'Consolas',monospace;color:var(--muted);font-size:0.8rem;">ADR-${num}</span>
+            <span>${_escapeHtml(adr.title || `Decisão ${i+1}`)}</span>
+            <span style="margin-left:auto;background:${color}22;color:${color};border:1px solid ${color}55;border-radius:12px;padding:0.1rem 0.55rem;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;font-weight:600;">${status}</span>
+          </summary>
+          ${fieldsHtml}
+        </details>
+      `;
+    }).join('');
+  }
+
   async function renderUseCases(useCases) {
     const block = document.getElementById('use-cases-block');
     const list = document.getElementById('use-cases-list');
@@ -1094,6 +1145,7 @@
 
     renderQualityScore(data.quality_score);
     renderUseCases(data.use_cases);
+    renderADRs(data.adrs);
 
     // Tech chips
     document.getElementById('tech-chips').innerHTML =
@@ -1149,6 +1201,7 @@
     if (data.files?.diagram) dl.innerHTML += `<a href="${data.files.diagram}" download class="png">⬇ Diagrama PNG</a>`;
     if (data.files?.md)      dl.innerHTML += `<a href="${data.files.md}" download class="md">⬇ Baixar .md</a>`;
     if (data.files?.xml)     dl.innerHTML += `<a href="${data.files.xml}" download class="xml" title="Knowledge file otimizado para alimentar outros LLMs/agentes">⬇ XML (LLM-friendly)</a>`;
+    if (data.files?.adr_index) dl.innerHTML += `<a href="${data.files.adr_index}" target="_blank" class="md" title="Indice das Architecture Decision Records">⬇ ADRs (índice)</a>`;
 
     document.getElementById('results').style.display = 'block';
     document.getElementById('results').scrollIntoView({ behavior: 'smooth' });

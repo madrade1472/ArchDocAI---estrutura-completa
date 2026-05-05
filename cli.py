@@ -37,7 +37,10 @@ def analyze(
     # ── Import layers ────────────────────────────────────────────────────────
     from src.ingestion import ProjectContext
     from src.analysis import LLMClient, ArchitectureAnalyzer, DiagramGenerator
-    from src.output import DocxGenerator, PdfGenerator, MarkdownGenerator, LLMFriendlyGenerator
+    from src.output import (
+        DocxGenerator, PdfGenerator, MarkdownGenerator,
+        LLMFriendlyGenerator, ADRGenerator,
+    )
 
     path = Path(project_path).resolve()
     if not path.is_dir():
@@ -147,6 +150,15 @@ def analyze(
         llm_gen = LLMFriendlyGenerator(output_dir=output_dir)
         xml_path = llm_gen.generate(result, scanned_files=ctx.files)
     console.print(f"[green]LLM-friendly XML saved:[/green] {xml_path}")
+
+    # ── Architecture Decision Records (one .md per decision + index) ─────────
+    if getattr(result, "adrs", None):
+        with console.status("[bold green]Generating ADR files (MADR format)..."):
+            adr_gen = ADRGenerator(output_dir=output_dir, language=language)
+            adr_files = adr_gen.generate(result)
+        if adr_files:
+            console.print(f"[green]ADRs saved:[/green] {len(adr_files) - 1} decision(s) at "
+                          f"{Path(adr_files[0]).parent}")
 
     console.print(Panel("[bold green]Done! Documentation generated successfully.[/bold green]"))
 
