@@ -222,6 +222,44 @@ class PdfGenerator:
             story.append(Spacer(1, 0.4 * cm))
             next_n += 1
 
+        # ── Architecture Pattern (classification badge) ──────────────────────
+        pattern = getattr(result, "architecture_pattern", None) or {}
+        matches = pattern.get("matches") or []
+        if matches:
+            ap_label = (f"{next_n}. Padrao Arquitetural"
+                        if self.language == "pt"
+                        else f"{next_n}. Architectural Pattern")
+            story.append(Paragraph(ap_label, s_h1))
+
+            primary = pattern.get("primary") or matches[0]["name"]
+            primary_pct = matches[0].get("adherence", 0)
+            s_pattern_primary = ParagraphStyle(
+                "PatternPrimary", fontSize=18, textColor=rgb(DARK_BLUE),
+                fontName="Helvetica-Bold", spaceAfter=2,
+            )
+            s_pattern_pct = ParagraphStyle(
+                "PatternPct", fontSize=18, textColor=colors.HexColor("#10B981"),
+                fontName="Helvetica-Bold", spaceAfter=8,
+            )
+            story.append(Paragraph(primary, s_pattern_primary))
+            story.append(Paragraph(f"{primary_pct}%", s_pattern_pct))
+
+            if pattern.get("summary"):
+                story.append(Paragraph(pattern["summary"], s_body))
+
+            ev_lbl = "Evidencias:" if self.language == "pt" else "Evidence:"
+            for m in matches:
+                story.append(Paragraph(f"<b>{m['name']}</b> - {m.get('adherence', 0)}%", s_h2))
+                if m.get("rationale"):
+                    story.append(Paragraph(m["rationale"], s_body))
+                evidence = m.get("evidence") or []
+                if evidence:
+                    story.append(Paragraph(f"<b>{ev_lbl}</b>", s_body))
+                    ev_items = [ListItem(Paragraph(e, s_bullet)) for e in evidence]
+                    story.append(ListFlowable(ev_items, bulletType="bullet"))
+            story.append(Spacer(1, 0.3 * cm))
+            next_n += 1
+
         # ── Use Cases (sequence diagrams) ────────────────────────────────────
         use_cases = getattr(result, "use_cases", None) or []
         if use_cases:
