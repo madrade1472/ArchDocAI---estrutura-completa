@@ -107,6 +107,24 @@ class UseCaseSchema(BaseModel):
         return cleaned
 
 
+class ADRSchema(BaseModel):
+    """A single Architecture Decision Record (MADR-inspired)."""
+    title: str
+    status: Literal["accepted", "proposed", "deprecated", "superseded"] = "accepted"
+    context: str = ""
+    decision: str = ""
+    consequences: str = ""
+    alternatives: str = ""
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v):
+        if not isinstance(v, str):
+            return "accepted"
+        v = v.lower().strip()
+        return v if v in ("accepted", "proposed", "deprecated", "superseded") else "accepted"
+
+
 class LLMResponseSchema(BaseModel):
     project_name: str = "Unknown Project"
     description: str = ""
@@ -117,11 +135,18 @@ class LLMResponseSchema(BaseModel):
     validation_questions: list[str] = Field(default_factory=list)
     quality_score: QualityScoreSchema = Field(default_factory=QualityScoreSchema)
     use_cases: list[UseCaseSchema] = Field(default_factory=list)
+    adrs: list[ADRSchema] = Field(default_factory=list)
 
     @field_validator("use_cases", mode="before")
     @classmethod
     def cap_use_cases(cls, v):
         # Cap at 5 to keep token budget under control and rendering legible
+        return v[:5] if isinstance(v, list) else []
+
+    @field_validator("adrs", mode="before")
+    @classmethod
+    def cap_adrs(cls, v):
+        # Cap at 5 ADRs — more than that bloats the prompt and reader fatigue sets in
         return v[:5] if isinstance(v, list) else []
 
     @field_validator("tech_stack", mode="before")
@@ -240,6 +265,16 @@ STRICT LIMITS:
       "description": "1-2 sentence summary of what this use case does",
       "sequence_diagram": "sequenceDiagram\n    actor User\n    User->>API: POST /endpoint\n    API->>DB: query\n    DB-->>API: result\n    API-->>User: 200 OK"
     }
+  ],
+  "adrs": [
+    {
+      "title": "Use FastAPI for HTTP layer",
+      "status": "accepted",
+      "context": "1-3 sentences describing the forces/problem that motivated the decision.",
+      "decision": "1-2 sentences stating exactly what was chosen.",
+      "consequences": "1-3 sentences listing the main positive and negative implications of the choice.",
+      "alternatives": "Optional: one sentence naming alternatives that were (or could have been) considered."
+    }
   ]
 }
 
@@ -251,6 +286,19 @@ USE CASES RULES (sequence diagrams):
 - Start every diagram with the literal line "sequenceDiagram" (no markdown fences, no leading whitespace before that line).
 - Prefer arrow types: ->> for synchronous calls, -->> for responses, -) for async messages.
 - If the project has fewer than 3 clear use cases, return only the ones you can justify. An empty list is acceptable for tiny libraries with no flows.
+
+ADR RULES (Architecture Decision Records):
+- Identify 3 to 5 architecturally SIGNIFICANT decisions visible in the project — choices that someone joining the team must know to understand WHY the code looks the way it does. Examples: framework choice, persistence model, sync vs async, multi-provider abstraction, layered separation, deployment topology, custom protocol decisions.
+- Skip trivialities (linter choice, file naming style, etc) and never invent decisions not supported by the code.
+- Each ADR uses MADR-inspired fields:
+  - title: imperative voice, short ("Use FastAPI for HTTP layer", "Adopt shallow git clone for ingestion").
+  - status: usually "accepted" since you are documenting decisions inferred from the existing code. Only use "proposed" if the code has clear todos/markers indicating an unresolved direction.
+  - context: 1-3 sentences explaining the problem / forces / constraints that motivated the decision.
+  - decision: 1-2 sentences stating exactly what was chosen.
+  - consequences: 1-3 sentences listing positive AND negative implications. Be honest about trade-offs.
+  - alternatives: one sentence (optional) naming what could have been chosen instead. Empty string if not obvious.
+- Cap at 5 ADRs maximum. Pick the highest-impact decisions.
+- All text fields must respect the OUTPUT_LANGUAGE.
 
 QUALITY SCORE RULES (the project gets a 0-100 score):
 - Score 5 dimensions, each 0 to 20. The "total" field MUST equal the sum of the breakdown.
@@ -282,6 +330,7 @@ class AnalysisResult:
                       "testabilidade": 0, "devops": 0},
     })
     use_cases: list[dict] = field(default_factory=list)
+    adrs: list[dict] = field(default_factory=list)
 
 
 @dataclass
@@ -453,6 +502,7 @@ class ArchitectureAnalyzer:
             score = validated.quality_score.model_dump()
             score = self._reconcile_score(score)
             use_cases = [uc.model_dump() for uc in validated.use_cases if uc.sequence_diagram.strip()]
+            adrs = [adr.model_dump() for adr in validated.adrs if adr.title.strip()]
             return AnalysisResult(
                 raw_json=data,
                 project_name=validated.project_name,
@@ -464,12 +514,15 @@ class ArchitectureAnalyzer:
                 validation_questions=validated.validation_questions,
                 quality_score=score,
                 use_cases=use_cases,
+                adrs=adrs,
             )
         except ValidationError as exc:
             log.warning("Pydantic validation found issues - falling back to safe defaults: %s", exc)
             score = self._reconcile_score(data.get("quality_score") or {})
             raw_use_cases = data.get("use_cases") or []
             use_cases = [uc for uc in raw_use_cases if isinstance(uc, dict) and uc.get("sequence_diagram")]
+            raw_adrs = data.get("adrs") or []
+            adrs = [adr for adr in raw_adrs if isinstance(adr, dict) and adr.get("title")]
             return AnalysisResult(
                 raw_json=data,
                 project_name=data.get("project_name", "Unknown Project"),
@@ -481,6 +534,7 @@ class ArchitectureAnalyzer:
                 validation_questions=data.get("validation_questions", []),
                 quality_score=score,
                 use_cases=use_cases,
+                adrs=adrs,
             )
 
     def _reconcile_score(self, score: dict) -> dict:

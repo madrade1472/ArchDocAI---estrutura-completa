@@ -297,7 +297,10 @@ def _run_analysis(
         from src.ingestion import ProjectContext
         from src.analysis import LLMClient, ArchitectureAnalyzer, DiagramGenerator
         from src.analysis.llm_client import LLMConfig
-        from src.output import DocxGenerator, PdfGenerator, MarkdownGenerator, LLMFriendlyGenerator
+        from src.output import (
+            DocxGenerator, PdfGenerator, MarkdownGenerator,
+            LLMFriendlyGenerator, ADRGenerator,
+        )
 
         # Thread-safe: LLMConfig built locally, never touches os.environ
         config = LLMConfig(provider=provider, api_key=api_key, model=model, base_url=base_url)  # type: ignore
@@ -344,6 +347,10 @@ def _run_analysis(
             analysis, scanned_files=ctx.files
         )
 
+        # Per-decision ADR files (MADR format) — index README.md + 0001-*.md per decision.
+        # Returns [] when the LLM did not produce ADRs, in which case nothing is shipped.
+        adr_paths = ADRGenerator(output_dir=str(output_dir_run), language=language).generate(analysis)
+
         def rel(p: str) -> str:
             return "/" + str(Path(p).relative_to("."))
 
@@ -362,6 +369,7 @@ def _run_analysis(
                 "validation_questions": analysis.validation_questions,
                 "quality_score": analysis.quality_score,
                 "use_cases": analysis.use_cases,
+                "adrs": getattr(analysis, "adrs", []) or [],
                 "mermaid": mermaid,
                 "interactive_graph": interactive_graph,
                 "files_scanned": summary["total_files"],
@@ -371,6 +379,10 @@ def _run_analysis(
                     "pdf": rel(pdf_path),
                     "md": rel(md_path),
                     "xml": rel(xml_path),
+                    # Index README.md of the ADR folder (others are linked from it).
+                    # Will be missing when no ADRs were produced — frontend handles that.
+                    "adr_index": rel(adr_paths[0]) if adr_paths else None,
+                    "adr_files": [rel(p) for p in adr_paths[1:]] if len(adr_paths) > 1 else [],
                 },
             },
         )

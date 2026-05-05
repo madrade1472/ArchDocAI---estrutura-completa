@@ -109,6 +109,31 @@ class LLMFriendlyGenerator:
             lines.append("  </improvement_points>")
             lines.append("")
 
+        # ── Architecture Decision Records (when present) ────────────────────
+        adrs = getattr(result, "adrs", None) or []
+        if adrs:
+            lines.append("  <adrs>")
+            lines.append("    <!-- Architecture Decision Records inferred from the codebase, "
+                         "MADR-inspired structure. Use these to understand WHY the project "
+                         "was built this way. -->")
+            for i, adr in enumerate(adrs, start=1):
+                num = f"{i:04d}"
+                title = escape((adr.get("title") or "").strip())
+                status = escape((adr.get("status") or "accepted").lower())
+                lines.append(f'    <adr id="ADR-{num}" status="{status}">')
+                lines.append(f"      <title>{title}</title>")
+                if (adr.get("context") or "").strip():
+                    lines.append(f"      <context>{escape(adr['context'].strip())}</context>")
+                if (adr.get("decision") or "").strip():
+                    lines.append(f"      <decision>{escape(adr['decision'].strip())}</decision>")
+                if (adr.get("consequences") or "").strip():
+                    lines.append(f"      <consequences>{escape(adr['consequences'].strip())}</consequences>")
+                if (adr.get("alternatives") or "").strip():
+                    lines.append(f"      <alternatives>{escape(adr['alternatives'].strip())}</alternatives>")
+                lines.append("    </adr>")
+            lines.append("  </adrs>")
+            lines.append("")
+
         # ── Key files (when scanned context is available) ───────────────────
         if scanned_files:
             lines.append("  <key_files>")

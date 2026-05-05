@@ -272,6 +272,47 @@ class PdfGenerator:
                 story.append(Spacer(1, 0.3 * cm))
             next_n += 1
 
+        # ── Architecture Decision Records (ADRs) ─────────────────────────────
+        adrs = getattr(result, "adrs", None) or []
+        if adrs:
+            adr_label = (f"{next_n}. Decisoes Arquiteturais (ADRs)"
+                         if self.language == "pt"
+                         else f"{next_n}. Architecture Decision Records (ADRs)")
+            story.append(Paragraph(adr_label, s_h1))
+            intro = (
+                "Decisoes arquiteturais identificadas no projeto. Cada ADR descreve o "
+                "contexto, a decisao tomada e suas consequencias - formato MADR."
+                if self.language == "pt" else
+                "Architectural decisions identified in the project. Each ADR describes the "
+                "context, the decision and its consequences - MADR format."
+            )
+            story.append(Paragraph(intro, s_body))
+
+            ctx_lbl = "Contexto:" if self.language == "pt" else "Context:"
+            dec_lbl = "Decisao:" if self.language == "pt" else "Decision:"
+            cons_lbl = "Consequencias:" if self.language == "pt" else "Consequences:"
+            alt_lbl = "Alternativas:" if self.language == "pt" else "Alternatives:"
+            status_lbl = "Status:"
+
+            for i, adr in enumerate(adrs, start=1):
+                num = f"{i:04d}"
+                title = (adr.get("title") or "Untitled").strip()
+                status = (adr.get("status") or "accepted").capitalize()
+                story.append(Paragraph(f"ADR-{num}: {title}", s_h2))
+                story.append(Paragraph(f"<b>{status_lbl}</b> {status}", s_body))
+
+                def _line(label: str, value: str):
+                    value = (value or "").strip()
+                    if value:
+                        story.append(Paragraph(f"<b>{label}</b> {value}", s_body))
+
+                _line(ctx_lbl, adr.get("context", ""))
+                _line(dec_lbl, adr.get("decision", ""))
+                _line(cons_lbl, adr.get("consequences", ""))
+                _line(alt_lbl, adr.get("alternatives", ""))
+                story.append(Spacer(1, 0.25 * cm))
+            next_n += 1
+
         # ── Good Practices ───────────────────────────────────────────────────
         gp_label = f"{next_n}. Boas Práticas Identificadas" if self.language == "pt" else f"{next_n}. Good Practices"
         story.append(Paragraph(gp_label, s_h1))

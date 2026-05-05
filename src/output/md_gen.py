@@ -168,6 +168,47 @@ class MarkdownGenerator:
                     lines.append("")
             n += 1
 
+        # ── Architecture Decision Records (ADRs) ──────────────────────────────
+        adrs = getattr(result, "adrs", None) or []
+        if adrs:
+            adr_label = (f"## {n}. Decisoes Arquiteturais (ADRs)"
+                         if L == "pt"
+                         else f"## {n}. Architecture Decision Records (ADRs)")
+            lines.append(adr_label)
+            lines.append("")
+            intro = (
+                "Decisoes arquiteturais identificadas no projeto, em formato MADR."
+                if L == "pt" else
+                "Architectural decisions identified in the project, in MADR format."
+            )
+            lines.append(intro)
+            lines.append("")
+            ctx_lbl = "Contexto" if L == "pt" else "Context"
+            dec_lbl = "Decisao" if L == "pt" else "Decision"
+            cons_lbl = "Consequencias" if L == "pt" else "Consequences"
+            alt_lbl = "Alternativas" if L == "pt" else "Alternatives"
+            for i, adr in enumerate(adrs, start=1):
+                num = f"{i:04d}"
+                title = (adr.get("title") or "Untitled").strip()
+                status = (adr.get("status") or "accepted").capitalize()
+                lines.append(f"### ADR-{num}: {title}")
+                lines.append("")
+                lines.append(f"**Status:** {status}")
+                lines.append("")
+                if (adr.get("context") or "").strip():
+                    lines.append(f"**{ctx_lbl}:** {adr['context'].strip()}")
+                    lines.append("")
+                if (adr.get("decision") or "").strip():
+                    lines.append(f"**{dec_lbl}:** {adr['decision'].strip()}")
+                    lines.append("")
+                if (adr.get("consequences") or "").strip():
+                    lines.append(f"**{cons_lbl}:** {adr['consequences'].strip()}")
+                    lines.append("")
+                if (adr.get("alternatives") or "").strip():
+                    lines.append(f"**{alt_lbl}:** {adr['alternatives'].strip()}")
+                    lines.append("")
+            n += 1
+
         # ── Good Practices ────────────────────────────────────────────────────
         gp_label = f"## {n}. Boas Praticas Identificadas" if L == "pt" else f"## {n}. Good Practices Identified"
         lines.append(gp_label)

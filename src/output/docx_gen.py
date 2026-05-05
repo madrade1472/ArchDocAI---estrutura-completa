@@ -278,6 +278,55 @@ class DocxGenerator:
                     code_run.font.color.rgb = RGBColor(0x33, 0x66, 0x99)
             next_n += 1
 
+        # ── Architecture Decision Records (ADRs) ─────────────────────────────
+        adrs = getattr(result, "adrs", None) or []
+        if adrs:
+            adr_title = (f"{next_n}. Decisoes Arquiteturais (ADRs)"
+                         if self.language == "pt"
+                         else f"{next_n}. Architecture Decision Records (ADRs)")
+            add_section(adr_title)
+            intro = (
+                "Decisoes arquiteturais identificadas no projeto. Cada ADR descreve o contexto, "
+                "a decisao tomada e suas consequencias — formato MADR."
+                if self.language == "pt" else
+                "Architectural decisions identified in the project. Each ADR describes the "
+                "context, the decision and its consequences — MADR format."
+            )
+            doc.add_paragraph(intro)
+
+            for i, adr in enumerate(adrs, start=1):
+                num = f"{i:04d}"
+                title = (adr.get("title") or "Untitled").strip()
+                status = (adr.get("status") or "accepted").capitalize()
+                add_subsection(f"ADR-{num}: {title}")
+
+                status_p = doc.add_paragraph()
+                status_label = "Status:" if self.language == "pt" else "Status:"
+                run_lbl = status_p.add_run(status_label + " ")
+                run_lbl.bold = True
+                run_lbl.font.size = Pt(11)
+                status_p.add_run(status).font.size = Pt(11)
+
+                def _adr_field(label: str, value: str):
+                    if not value:
+                        return
+                    p = doc.add_paragraph()
+                    r = p.add_run(label + " ")
+                    r.bold = True
+                    r.font.size = Pt(11)
+                    p.add_run(value).font.size = Pt(11)
+
+                ctx_lbl = "Contexto:" if self.language == "pt" else "Context:"
+                dec_lbl = "Decisao:" if self.language == "pt" else "Decision:"
+                cons_lbl = "Consequencias:" if self.language == "pt" else "Consequences:"
+                alt_lbl = "Alternativas:" if self.language == "pt" else "Alternatives:"
+                _adr_field(ctx_lbl, (adr.get("context") or "").strip())
+                _adr_field(dec_lbl, (adr.get("decision") or "").strip())
+                _adr_field(cons_lbl, (adr.get("consequences") or "").strip())
+                _adr_field(alt_lbl, (adr.get("alternatives") or "").strip())
+
+            next_n += 1
+
         # ── Good Practices ───────────────────────────────────────────────────
         gp_title = f"{next_n}. Boas Práticas Identificadas" if self.language == "pt" else f"{next_n}. Good Practices Identified"
         add_section(gp_title)
