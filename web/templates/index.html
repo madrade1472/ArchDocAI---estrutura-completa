@@ -524,6 +524,18 @@
       <div id="qs-breakdown" style="display:grid;grid-template-columns:repeat(5,1fr);gap:0.6rem;margin-top:1.1rem;"></div>
     </div>
 
+    <div id="pattern-block" style="display:none;margin:1.25rem 0 1.5rem;padding:1.25rem;background:linear-gradient(135deg,#0f172a,#1e293b);border:1px solid var(--border);border-radius:12px;">
+      <div style="display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;">
+        <div id="pattern-badge" style="flex:0 0 auto;width:88px;height:88px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.5rem;font-weight:700;color:#fff;border:4px solid #10B981;background:#0a0e17;">--</div>
+        <div style="flex:1 1 240px;min-width:200px;">
+          <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--muted);font-weight:600;">Padrão Arquitetural Detectado</div>
+          <div id="pattern-primary" style="font-size:1.2rem;font-weight:700;margin-top:0.15rem;color:var(--text);">--</div>
+          <div id="pattern-summary" style="font-size:0.85rem;color:var(--muted);margin-top:0.45rem;line-height:1.45;"></div>
+        </div>
+      </div>
+      <div id="pattern-matches" style="display:flex;flex-direction:column;gap:0.6rem;margin-top:1.1rem;"></div>
+    </div>
+
     <div class="section-title">Stack Tecnológico</div>
     <div class="chips" id="tech-chips"></div>
 
@@ -1015,6 +1027,48 @@
     };
   });
 
+  function renderPattern(pattern) {
+    const block = document.getElementById('pattern-block');
+    const matches = (pattern && pattern.matches) || [];
+    if (!matches.length) { block.style.display = 'none'; return; }
+    block.style.display = 'block';
+
+    const primary = pattern.primary || matches[0].name;
+    const primaryPct = matches[0].adherence || 0;
+    const color = primaryPct >= 80 ? '#10B981' : primaryPct >= 60 ? '#facc15' : '#fb923c';
+
+    const badge = document.getElementById('pattern-badge');
+    badge.textContent = `${primaryPct}%`;
+    badge.style.borderColor = color;
+    badge.style.color = color;
+
+    document.getElementById('pattern-primary').textContent = primary;
+    document.getElementById('pattern-summary').textContent = pattern.summary || '';
+
+    document.getElementById('pattern-matches').innerHTML = matches.map(m => {
+      const pct = m.adherence || 0;
+      const c = pct >= 80 ? '#10B981' : pct >= 60 ? '#facc15' : '#fb923c';
+      const evidence = (m.evidence || []).map(e =>
+        `<li style="color:var(--muted);font-size:0.8rem;line-height:1.5;">${_escapeHtml(e)}</li>`
+      ).join('');
+      return `
+        <div style="background:#0a0e17;border:1px solid var(--border);border-left:3px solid ${c};border-radius:8px;padding:0.75rem 0.95rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+            <div style="font-weight:600;color:var(--text);font-size:0.95rem;">${_escapeHtml(m.name)}</div>
+            <div style="display:flex;align-items:center;gap:0.5rem;flex:0 0 auto;">
+              <div style="width:120px;height:6px;background:#1f2937;border-radius:3px;overflow:hidden;">
+                <div style="width:${pct}%;height:100%;background:${c};"></div>
+              </div>
+              <span style="font-weight:700;color:${c};font-size:0.9rem;min-width:42px;text-align:right;">${pct}%</span>
+            </div>
+          </div>
+          ${m.rationale ? `<div style="margin-top:0.4rem;font-size:0.85rem;color:var(--text);line-height:1.5;">${_escapeHtml(m.rationale)}</div>` : ''}
+          ${evidence ? `<ul style="margin:0.5rem 0 0 1.1rem;padding:0;">${evidence}</ul>` : ''}
+        </div>
+      `;
+    }).join('');
+  }
+
   function renderQualityScore(score) {
     const block = document.getElementById('quality-score-block');
     if (!score || typeof score.total !== 'number' || score.total <= 0) {
@@ -1144,6 +1198,7 @@
     document.getElementById('proj-desc').textContent = data.description;
 
     renderQualityScore(data.quality_score);
+    renderPattern(data.architecture_pattern);
     renderUseCases(data.use_cases);
     renderADRs(data.adrs);
 

@@ -370,6 +370,7 @@ def _run_analysis(
                 "quality_score": analysis.quality_score,
                 "use_cases": analysis.use_cases,
                 "adrs": getattr(analysis, "adrs", []) or [],
+                "architecture_pattern": getattr(analysis, "architecture_pattern", {}) or {},
                 "mermaid": mermaid,
                 "interactive_graph": interactive_graph,
                 "files_scanned": summary["total_files"],

@@ -148,6 +148,38 @@ class MarkdownGenerator:
             lines.append("")
             n += 1
 
+        # ── Architecture Pattern (classification badge) ───────────────────────
+        pattern = getattr(result, "architecture_pattern", None) or {}
+        matches = pattern.get("matches") or []
+        if matches:
+            ap_label = (f"## {n}. Padrao Arquitetural"
+                        if L == "pt" else
+                        f"## {n}. Architectural Pattern")
+            lines.append(ap_label)
+            lines.append("")
+            primary = pattern.get("primary") or matches[0]["name"]
+            primary_pct = matches[0].get("adherence", 0)
+            lines.append(f"**{primary}** - **{primary_pct}%**")
+            lines.append("")
+            if pattern.get("summary"):
+                lines.append(pattern["summary"])
+                lines.append("")
+            ev_lbl = "Evidencias" if L == "pt" else "Evidence"
+            for m in matches:
+                lines.append(f"### {m['name']} ({m.get('adherence', 0)}%)")
+                lines.append("")
+                if m.get("rationale"):
+                    lines.append(m["rationale"])
+                    lines.append("")
+                evidence = m.get("evidence") or []
+                if evidence:
+                    lines.append(f"**{ev_lbl}:**")
+                    lines.append("")
+                    for e in evidence:
+                        lines.append(f"- {e}")
+                    lines.append("")
+            n += 1
+
         # ── Use Cases (sequence diagrams) ─────────────────────────────────────
         use_cases = getattr(result, "use_cases", None) or []
         if use_cases:

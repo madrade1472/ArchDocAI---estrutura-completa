@@ -61,6 +61,32 @@ class LLMFriendlyGenerator:
             lines.append("  </quality_score>")
             lines.append("")
 
+        # ── Architecture pattern classification (when present) ──────────────
+        pattern = getattr(result, "architecture_pattern", None) or {}
+        matches = pattern.get("matches") or []
+        if matches:
+            primary = escape(pattern.get("primary") or matches[0]["name"])
+            lines.append(f'  <architecture_pattern primary="{primary}">')
+            if pattern.get("summary"):
+                lines.append(f"    <summary>{escape(pattern['summary'])}</summary>")
+            lines.append("    <matches>")
+            for m in matches:
+                name = escape(m.get("name", ""))
+                adh = int(m.get("adherence", 0))
+                lines.append(f'      <match name="{name}" adherence="{adh}">')
+                if m.get("rationale"):
+                    lines.append(f"        <rationale>{escape(m['rationale'])}</rationale>")
+                evidence = m.get("evidence") or []
+                if evidence:
+                    lines.append("        <evidence>")
+                    for e in evidence:
+                        lines.append(f"          <item>{escape(e)}</item>")
+                    lines.append("        </evidence>")
+                lines.append("      </match>")
+            lines.append("    </matches>")
+            lines.append("  </architecture_pattern>")
+            lines.append("")
+
         # ── Architecture layers and components ──────────────────────────────
         lines.append("  <architecture>")
         for layer in result.layers:
