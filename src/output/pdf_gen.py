@@ -89,9 +89,9 @@ class PdfGenerator:
             canvas.saveState()
             canvas.setFont("Helvetica", 8)
             canvas.setFillColor(colors.HexColor(GREY_HDR))
-            # Header: project name (left) | "ArchDocAI" (right)
+            # Header: project name (left) | ArchDocAI - TEC-IT (right)
             canvas.drawString(left_margin, page_h - 1.2 * cm, project_name)
-            canvas.drawRightString(page_w - right_margin, page_h - 1.2 * cm, "ArchDocAI")
+            canvas.drawRightString(page_w - right_margin, page_h - 1.2 * cm, "ArchDocAI - TEC-IT")
             # Thin rule under the header
             canvas.setStrokeColor(colors.HexColor(GREY_RULE))
             canvas.setLineWidth(0.4)
@@ -99,10 +99,15 @@ class PdfGenerator:
                 left_margin, page_h - 1.4 * cm,
                 page_w - right_margin, page_h - 1.4 * cm,
             )
-            # Footer: centered page number, omitting the cover (page 1).
+            # Footer: company tagline above page number, both centered. The
+            # cover (page 1) skips the page number but keeps the tagline.
+            canvas.drawCentredString(
+                page_w / 2, 1.5 * cm,
+                "Developed by TEC-IT BETTER SOLUTION FOR YOUR DATA",
+            )
             page_num = canvas.getPageNumber()
             if page_num >= 2:
-                canvas.drawCentredString(page_w / 2, 1.2 * cm, f"{page_num}")
+                canvas.drawCentredString(page_w / 2, 0.95 * cm, f"{page_num}")
             canvas.restoreState()
 
         doc = BaseDocTemplate(
