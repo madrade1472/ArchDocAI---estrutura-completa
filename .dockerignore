@@ -1,0 +1,52 @@
+# Keep the build context lean. Anything matched here never reaches the
+# Docker daemon, which speeds up builds and prevents secrets from leaking
+# into image layers.
+
+# Python build artifacts and virtual envs
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Node (only used at one point during development; never needed at runtime)
+node_modules/
+package*.json
+
+# Generated outputs and logs (mounted as volumes at runtime)
+/output/
+/logs/
+
+# Top-level test outputs that may exist after manual smoke tests
+/*.docx
+/*.pdf
+/*.png
+!docs/*.png
+
+# Secrets — never bake into image layers
+.env
+.env.*
+!.env.example
+
+# IDE / OS noise
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Git metadata (the runtime needs the `git` binary, not the project history)
+.git/
+.gitignore
+.gitattributes
+
+# Local plan / scratch directories
+.claude/
+plans/
+
+# Documentation that the runtime never reads
+CONTRIBUTING.md
+docs/feedback-evolucao.md
