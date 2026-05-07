@@ -1,6 +1,9 @@
 """
 Layer 2 - Analysis: LLM-agnostic client.
-Supports OpenAI (GPT-4, GPT-3.5) and Anthropic (Claude) via the same interface.
+Supports OpenAI (GPT), Anthropic (Claude) and DeepSeek (chat/reasoner) via the
+same interface. DeepSeek exposes an OpenAI-compatible API, so it reuses the
+OpenAI client with a different base_url.
+
 Custom base_url allows self-hosted / local models (e.g. Ollama).
 
 Reliability:
@@ -16,7 +19,11 @@ from src.logger import get_logger
 
 log = get_logger(__name__)
 
-LLMProvider = Literal["openai", "anthropic", "custom"]
+LLMProvider = Literal["openai", "anthropic", "deepseek", "custom"]
+
+# Default DeepSeek API endpoint. Users can override via LLMConfig.base_url
+# (e.g. for the beta endpoint api.deepseek.com/beta).
+_DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 
 _RETRYABLE_STATUS = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 4
@@ -48,10 +55,16 @@ class LLMClient:
             import anthropic
             return anthropic.Anthropic(api_key=cfg.api_key)
 
+        # OpenAI-compatible path: openai, deepseek, custom (self-hosted).
         import openai
         kwargs: dict = {"api_key": cfg.api_key}
+        # Pick the right default base_url per provider, but always let an
+        # explicit cfg.base_url win so users can target beta endpoints,
+        # corporate proxies, etc.
         if cfg.base_url:
             kwargs["base_url"] = cfg.base_url
+        elif cfg.provider == "deepseek":
+            kwargs["base_url"] = _DEEPSEEK_BASE_URL
         return openai.OpenAI(**kwargs)
 
     def chat(self, system: str, user: str) -> str:

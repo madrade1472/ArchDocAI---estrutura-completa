@@ -414,12 +414,13 @@
           <select name="provider" id="provider">
             <option value="openai">OpenAI (GPT)</option>
             <option value="anthropic">Anthropic (Claude)</option>
+            <option value="deepseek">DeepSeek</option>
             <option value="custom">Custom / Self-hosted</option>
           </select>
         </div>
         <div>
           <label>Modelo</label>
-          <input type="text" name="model" id="model" value="gpt-4o" placeholder="gpt-4o | claude-sonnet-4-6" />
+          <input type="text" name="model" id="model" value="gpt-4o" placeholder="gpt-4o | claude-sonnet-4-6 | deepseek-chat" />
         </div>
       </div>
       <label>API Key</label>
@@ -858,7 +859,7 @@
 
 <script>
   // Provider -> default model + show/hide base_url row
-  const modelMap = { openai: 'gpt-4o', anthropic: 'claude-sonnet-4-6', custom: '' };
+  const modelMap = { openai: 'gpt-4o', anthropic: 'claude-sonnet-4-6', deepseek: 'deepseek-chat', custom: '' };
   document.getElementById('provider').addEventListener('change', e => {
     document.getElementById('model').value = modelMap[e.target.value] || '';
     const isCustom = e.target.value === 'custom';
