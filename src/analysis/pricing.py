@@ -24,6 +24,11 @@ MODEL_PRICING: dict[str, dict[str, float]] = {
     "claude-sonnet-4-5":   {"input": 3.00,  "output": 15.00},
     "claude-haiku-4-5":    {"input": 1.00,  "output": 5.00},
     "claude-haiku-4-5-20251001": {"input": 1.00, "output": 5.00},
+
+    # DeepSeek (cache-miss pricing; cache-hit input is ~4x cheaper but we
+    # use the conservative number for the cost preview).
+    "deepseek-chat":       {"input": 0.27,  "output": 1.10},
+    "deepseek-reasoner":   {"input": 0.55,  "output": 2.19},
 }
 
 # Conservative upper bound for the analysis JSON the LLM produces.

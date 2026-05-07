@@ -250,6 +250,52 @@ class DocxGenerator:
 
             next_n += 1
 
+        # ── Architecture Pattern (classification badge) ──────────────────────
+        pattern = getattr(result, "architecture_pattern", None) or {}
+        matches = pattern.get("matches") or []
+        if matches:
+            ap_title = (f"{next_n}. Padrao Arquitetural"
+                        if self.language == "pt"
+                        else f"{next_n}. Architectural Pattern")
+            add_section(ap_title)
+
+            primary = pattern.get("primary") or matches[0]["name"]
+            primary_pct = matches[0].get("adherence", 0)
+            badge_p = doc.add_paragraph()
+            r1 = badge_p.add_run(f"{primary}  ")
+            r1.bold = True
+            r1.font.size = Pt(18)
+            r1.font.color.rgb = RGBColor(0x1D, 0x35, 0x57)
+            r2 = badge_p.add_run(f"{primary_pct}%")
+            r2.bold = True
+            r2.font.size = Pt(18)
+            r2.font.color.rgb = RGBColor(0x10, 0xB9, 0x81)
+
+            if pattern.get("summary"):
+                doc.add_paragraph(pattern["summary"])
+
+            other_lbl = ("Outras correspondencias:"
+                         if self.language == "pt" else
+                         "Other matches:")
+            if len(matches) > 1:
+                doc.add_paragraph(other_lbl)
+
+            for m in matches:
+                title_p = doc.add_paragraph()
+                pr1 = title_p.add_run(f"{m['name']} - {m.get('adherence', 0)}%")
+                pr1.bold = True
+                pr1.font.size = Pt(11)
+                if m.get("rationale"):
+                    doc.add_paragraph(m["rationale"])
+                ev_lbl = "Evidencias:" if self.language == "pt" else "Evidence:"
+                evidence = m.get("evidence") or []
+                if evidence:
+                    el = doc.add_paragraph()
+                    el.add_run(ev_lbl).bold = True
+                    for e in evidence:
+                        add_bullet(e)
+            next_n += 1
+
         # ── Use Cases (sequence diagrams) ────────────────────────────────────
         use_cases = getattr(result, "use_cases", None) or []
         if use_cases:

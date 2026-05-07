@@ -370,6 +370,7 @@ def _run_analysis(
                 "quality_score": analysis.quality_score,
                 "use_cases": analysis.use_cases,
                 "adrs": getattr(analysis, "adrs", []) or [],
+                "architecture_pattern": getattr(analysis, "architecture_pattern", {}) or {},
                 "mermaid": mermaid,
                 "interactive_graph": interactive_graph,
                 "files_scanned": summary["total_files"],
@@ -478,8 +479,8 @@ def create_app() -> FastAPI:
         if not api_key:
             raise HTTPException(400, "api_key nao informada e LLM_API_KEY nao configurada no .env")
 
-        if provider not in ("openai", "anthropic", "custom"):
-            raise HTTPException(400, "provider deve ser openai, anthropic ou custom")
+        if provider not in ("openai", "anthropic", "deepseek", "custom"):
+            raise HTTPException(400, "provider deve ser openai, anthropic, deepseek ou custom")
 
         # Validate git URL scheme -- reject file://, git://, local paths, etc.
         if not git_url.strip() or not _GIT_URL_RE.match(git_url.strip()):
@@ -590,8 +591,8 @@ def create_app() -> FastAPI:
                 headers={"Retry-After": str(retry_after)},
             )
 
-        if provider not in ("openai", "anthropic", "custom"):
-            raise HTTPException(400, "provider deve ser openai, anthropic ou custom")
+        if provider not in ("openai", "anthropic", "deepseek", "custom"):
+            raise HTTPException(400, "provider deve ser openai, anthropic, deepseek ou custom")
         if not git_url.strip() or not _GIT_URL_RE.match(git_url.strip()):
             raise HTTPException(
                 400,

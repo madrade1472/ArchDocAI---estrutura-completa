@@ -125,6 +125,41 @@ class ADRSchema(BaseModel):
         return v if v in ("accepted", "proposed", "deprecated", "superseded") else "accepted"
 
 
+class PatternMatchSchema(BaseModel):
+    """One classification of the project against a known architectural pattern."""
+    name: str
+    adherence: int = 0  # 0-100 percent fit
+    rationale: str = ""
+    evidence: list[str] = Field(default_factory=list)
+
+    @field_validator("adherence", mode="before")
+    @classmethod
+    def clamp_adherence(cls, v):
+        try:
+            n = int(v)
+        except (TypeError, ValueError):
+            return 0
+        return max(0, min(100, n))
+
+    @field_validator("evidence", mode="before")
+    @classmethod
+    def cap_evidence(cls, v):
+        # 4 short observations per match keep the seal compact
+        return v[:4] if isinstance(v, list) else []
+
+
+class ArchitecturePatternSchema(BaseModel):
+    """Architectural-pattern classification for the project as a whole."""
+    primary: str = ""
+    summary: str = ""
+    matches: list[PatternMatchSchema] = Field(default_factory=list)
+
+    @field_validator("matches", mode="before")
+    @classmethod
+    def cap_matches(cls, v):
+        return v[:5] if isinstance(v, list) else []
+
+
 class LLMResponseSchema(BaseModel):
     project_name: str = "Unknown Project"
     description: str = ""
@@ -136,6 +171,7 @@ class LLMResponseSchema(BaseModel):
     quality_score: QualityScoreSchema = Field(default_factory=QualityScoreSchema)
     use_cases: list[UseCaseSchema] = Field(default_factory=list)
     adrs: list[ADRSchema] = Field(default_factory=list)
+    architecture_pattern: ArchitecturePatternSchema = Field(default_factory=ArchitecturePatternSchema)
 
     @field_validator("use_cases", mode="before")
     @classmethod
@@ -275,7 +311,21 @@ STRICT LIMITS:
       "consequences": "1-3 sentences listing the main positive and negative implications of the choice.",
       "alternatives": "Optional: one sentence naming alternatives that were (or could have been) considered."
     }
-  ]
+  ],
+  "architecture_pattern": {
+    "primary": "Layered Architecture",
+    "summary": "1-2 sentence overall classification of the project's architectural style.",
+    "matches": [
+      {
+        "name": "Layered Architecture",
+        "adherence": 85,
+        "rationale": "1-2 sentences explaining why the project fits this pattern at this level.",
+        "evidence": [
+          "Short observation citing actual folder/file/code that supports the score."
+        ]
+      }
+    ]
+  }
 }
 
 USE CASES RULES (sequence diagrams):
@@ -299,6 +349,19 @@ ADR RULES (Architecture Decision Records):
   - alternatives: one sentence (optional) naming what could have been chosen instead. Empty string if not obvious.
 - Cap at 5 ADRs maximum. Pick the highest-impact decisions.
 - All text fields must respect the OUTPUT_LANGUAGE.
+
+ARCHITECTURE PATTERN RULES (classify the project against well-known patterns):
+- Patterns to consider (pick only the most relevant, never list all of them): Hexagonal Architecture (Ports & Adapters), Clean Architecture, MVC, Layered (N-tier), Microservices, Event-Driven, Pipeline / Pipes-and-Filters, Modular Monolith, Serverless, Monolithic.
+- Return between 2 and 4 matches in "matches", ordered by adherence DESCENDING. Skip any pattern that scores under 25%; silence is better than noise.
+- "primary" must equal the name of the highest-adherence match. "summary" is 1-2 sentences in the OUTPUT_LANGUAGE describing the overall classification (e.g. "Hybrid layered project with clear separation of ingestion/analysis/output, leaning towards Pipeline").
+- adherence: integer 0-100. Be calibrated and honest:
+  - 90-100 = textbook implementation of the pattern.
+  - 70-89  = clearly follows the pattern with minor gaps.
+  - 50-69  = partial or hybrid; recognizable traits but significant deviations.
+  - 25-49  = traces of the pattern only.
+  - Avoid 100%; perfection is suspicious. If you genuinely see textbook execution, cap at 95.
+- evidence: 2-4 short observations (one sentence each) citing ACTUAL folder names, file names, class names or code-level decisions that justify the score. Generic statements like "well organized" are NOT evidence.
+- rationale: 1-2 sentences explaining why this pattern matches at this level. Different from evidence (rationale is the conclusion, evidence is the data).
 
 QUALITY SCORE RULES (the project gets a 0-100 score):
 - Score 5 dimensions, each 0 to 20. The "total" field MUST equal the sum of the breakdown.
@@ -331,6 +394,11 @@ class AnalysisResult:
     })
     use_cases: list[dict] = field(default_factory=list)
     adrs: list[dict] = field(default_factory=list)
+    architecture_pattern: dict = field(default_factory=lambda: {
+        "primary": "",
+        "summary": "",
+        "matches": [],
+    })
 
 
 @dataclass
@@ -503,6 +571,7 @@ class ArchitectureAnalyzer:
             score = self._reconcile_score(score)
             use_cases = [uc.model_dump() for uc in validated.use_cases if uc.sequence_diagram.strip()]
             adrs = [adr.model_dump() for adr in validated.adrs if adr.title.strip()]
+            pattern = self._reconcile_pattern(validated.architecture_pattern.model_dump())
             return AnalysisResult(
                 raw_json=data,
                 project_name=validated.project_name,
@@ -515,6 +584,7 @@ class ArchitectureAnalyzer:
                 quality_score=score,
                 use_cases=use_cases,
                 adrs=adrs,
+                architecture_pattern=pattern,
             )
         except ValidationError as exc:
             log.warning("Pydantic validation found issues - falling back to safe defaults: %s", exc)
@@ -523,6 +593,7 @@ class ArchitectureAnalyzer:
             use_cases = [uc for uc in raw_use_cases if isinstance(uc, dict) and uc.get("sequence_diagram")]
             raw_adrs = data.get("adrs") or []
             adrs = [adr for adr in raw_adrs if isinstance(adr, dict) and adr.get("title")]
+            pattern = self._reconcile_pattern(data.get("architecture_pattern") or {})
             return AnalysisResult(
                 raw_json=data,
                 project_name=data.get("project_name", "Unknown Project"),
@@ -535,6 +606,7 @@ class ArchitectureAnalyzer:
                 quality_score=score,
                 use_cases=use_cases,
                 adrs=adrs,
+                architecture_pattern=pattern,
             )
 
     def _reconcile_score(self, score: dict) -> dict:
@@ -556,4 +628,48 @@ class ArchitectureAnalyzer:
             "total": total,
             "rationale": (score.get("rationale") or "").strip(),
             "breakdown": breakdown,
+        }
+
+    def _reconcile_pattern(self, pattern: dict) -> dict:
+        """Sort matches by adherence DESC, drop matches under 25%, ensure primary
+        matches the highest-adherence entry, and clamp all percentages to 0-100.
+
+        LLMs sometimes return matches out of order, repeat them, or set "primary"
+        to a name that doesn't appear in the matches list. This normalizes the
+        structure so downstream renderers can trust it.
+        """
+        raw_matches = pattern.get("matches") or []
+        clean: list[dict] = []
+        seen_names: set[str] = set()
+        for m in raw_matches:
+            if not isinstance(m, dict):
+                continue
+            name = (m.get("name") or "").strip()
+            if not name:
+                continue
+            key = name.lower()
+            if key in seen_names:
+                continue
+            try:
+                adherence = max(0, min(100, int(m.get("adherence", 0))))
+            except (TypeError, ValueError):
+                adherence = 0
+            if adherence < 25:
+                continue
+            seen_names.add(key)
+            evidence = m.get("evidence") or []
+            evidence = [e for e in evidence if isinstance(e, str) and e.strip()][:4]
+            clean.append({
+                "name": name,
+                "adherence": adherence,
+                "rationale": (m.get("rationale") or "").strip(),
+                "evidence": evidence,
+            })
+
+        clean.sort(key=lambda m: m["adherence"], reverse=True)
+        primary = clean[0]["name"] if clean else (pattern.get("primary") or "").strip()
+        return {
+            "primary": primary,
+            "summary": (pattern.get("summary") or "").strip(),
+            "matches": clean,
         }
